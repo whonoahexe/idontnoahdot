@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Illogical Impulse
+Description=Material You boot splash matched to matugen dotfiles colors
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/illogical-impulse
+ScriptFile=/usr/share/plymouth/themes/illogical-impulse/illogical-impulse.script
