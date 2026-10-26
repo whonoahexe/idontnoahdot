@@ -1,0 +1,317 @@
+From 935cd88ba83f34d22366f126c30f8b9a22406764 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Sat, 10 Oct 2026 23:03:04 +0530
+Subject: [PATCH 3/3] feat(sidebar): group SSH aliases into one host with
+ selectable routes
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+---
+ src/style.css                           |   8 ++
+ src/ui/window.rs                        |  43 +++++++++
+ src/ui/window/drive_dialogs/ssh_host.rs |   6 +-
+ src/ui/window/ssh_hosts.rs              | 123 ++++++++++++++++++++----
+ 4 files changed, 158 insertions(+), 22 deletions(-)
+
+diff --git a/src/style.css b/src/style.css
+index 4c0beae1..94cfd975 100644
+--- a/src/style.css
++++ b/src/style.css
+@@ -6670,3 +6670,11 @@ popover.settings-action-library > contents {
+ .sidebar-rail .sidebar-ssh-host {
+   padding-left: 8px;
+ }
++
++.sidebar-ssh-route {
++  font-size: 0.85em;
++}
++
++.sidebar-rail .sidebar-ssh-route {
++  opacity: 0;
++}
+diff --git a/src/ui/window.rs b/src/ui/window.rs
+index 20fa5455..17b64290 100644
+--- a/src/ui/window.rs
++++ b/src/ui/window.rs
+@@ -2492,6 +2492,13 @@ impl SidebarState {
+             let location = host.location();
+             let row = sidebar_button(crate::assets::icons::TERMINAL, &host.display_name());
+             row.add_css_class("sidebar-ssh-host");
++            if let (Some(route), Some(content)) = (&host.route, row.child().and_downcast::<gtk::Box>())
++            {
++                let badge = gtk::Label::new(Some(&route.selected));
++                badge.add_css_class("dim-label");
++                badge.add_css_class("sidebar-ssh-route");
++                content.append(&badge);
++            }
+             crate::ui::accessibility::set_description(&row, Some(&location.display_path()));
+             self.bind_place_row(&row, location, PlaceNavigation::Validate);
+             self.attach_ssh_host_menu(&row, host);
+@@ -2502,6 +2509,29 @@ impl SidebarState {
+     fn attach_ssh_host_menu(&self, row: &gtk::Button, host: ssh_hosts::SshHost) {
+         let menu = super::accessibility::menu_box();
+         menu.add_css_class("folder-context-menu");
++        let routes = host
++            .route
++            .as_ref()
++            .map(|choice| {
++                choice
++                    .routes
++                    .iter()
++                    .map(|route| {
++                        let icon = if *route == choice.selected {
++                            crate::assets::icons::CHECK
++                        } else {
++                            crate::assets::icons::ROUTE
++                        };
++                        let option = sidebar_context_option(icon, &format!("Via {route}"), false);
++                        menu.append(&option);
++                        (option, route.clone())
++                    })
++                    .collect::<Vec<_>>()
++            })
++            .unwrap_or_default();
++        if !routes.is_empty() {
++            menu.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
++        }
+         let edit = sidebar_context_option(crate::assets::icons::PENCIL, "Edit connection…", false);
+         menu.append(&edit);
+         let popover = gtk::Popover::builder()
+@@ -2511,6 +2541,19 @@ impl SidebarState {
+             .build();
+         popover.add_css_class("folder-context-popover");
+         popover.set_parent(row);
++        for (option, route) in routes {
++            let group = host.key().to_owned();
++            let weak_popover = popover.downgrade();
++            option.connect_clicked(move |_| {
++                if let Some(popover) = weak_popover.upgrade() {
++                    popover.popdown();
++                }
++                if let Err(error) = ssh_hosts::select_route(&group, &route) {
++                    tracing::warn!("could not save SSH route: {error}");
++                }
++                device_release::refresh_sidebars();
++            });
++        }
+         let view = self.view.clone();
+         let weak_popover = popover.downgrade();
+         let parent = row.clone().upcast::<gtk::Widget>();
+diff --git a/src/ui/window/drive_dialogs/ssh_host.rs b/src/ui/window/drive_dialogs/ssh_host.rs
+index 9624dadc..0b9448df 100644
+--- a/src/ui/window/drive_dialogs/ssh_host.rs
++++ b/src/ui/window/drive_dialogs/ssh_host.rs
+@@ -20,7 +20,7 @@ pub(in crate::ui::window) fn show_ssh_host_dialog(parent: &gtk::Widget, host: &s
+         parent,
+         assets::icons::TERMINAL,
+         "Edit connection",
+-        &host.alias,
++        host.key(),
+         "Save",
+         false,
+     ) else {
+@@ -92,7 +92,7 @@ pub(in crate::ui::window) fn show_ssh_host_dialog(parent: &gtk::Widget, host: &s
+     let layer = shell.layer.clone();
+     let overlay = shell.overlay.clone();
+     let root = shell.blurred_root.clone();
+-    let alias = host.alias.clone();
++    let key = host.key().to_owned();
+     let (user_entry, folder_entry, error_label) = (user.clone(), folder.clone(), error.clone());
+     shell.layout.confirm.connect_clicked(move |button| {
+         if !button.is_sensitive() {
+@@ -106,7 +106,7 @@ pub(in crate::ui::window) fn show_ssh_host_dialog(parent: &gtk::Widget, host: &s
+             user: non_empty(user_entry.text()),
+             folder: non_empty(folder_entry.text()),
+         };
+-        match ssh_hosts::save_override(&alias, value) {
++        match ssh_hosts::save_override(&key, value) {
+             Ok(()) => {
+                 dismiss_modal_layer(&layer, &overlay, root.as_ref());
+                 device_release::refresh_sidebars();
+diff --git a/src/ui/window/ssh_hosts.rs b/src/ui/window/ssh_hosts.rs
+index 62cf0ce7..08d75922 100644
+--- a/src/ui/window/ssh_hosts.rs
++++ b/src/ui/window/ssh_hosts.rs
+@@ -1,7 +1,8 @@
+ // SPDX-License-Identifier: MIT
+ 
+ //! SSH hosts from `~/.ssh/config`, listed under Network in the sidebar.
+-//! Per-host user and folder overrides live in `$XDG_CONFIG_HOME/strata/ssh-hosts.toml`.
++//! Per-host user and folder overrides, hidden hosts, and route groups (one machine
++//! reachable through several aliases) live in `$XDG_CONFIG_HOME/strata/ssh-hosts.toml`.
+ 
+ use std::{cell::Cell, collections::BTreeMap, path::PathBuf};
+ 
+@@ -31,12 +32,23 @@ pub(super) struct HostOverride {
+     pub folder: Option<String>,
+ }
+ 
++#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
++#[serde(deny_unknown_fields)]
++pub(super) struct Group {
++    /// Route name to ssh alias, for example `Tunnel = "studio-ext"`.
++    pub routes: BTreeMap<String, String>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub selected: Option<String>,
++}
++
+ #[derive(Debug, Default, Deserialize, Serialize)]
+ #[serde(deny_unknown_fields)]
+ pub(super) struct Settings {
+     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub hidden: Vec<String>,
+     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
++    pub groups: BTreeMap<String, Group>,
++    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+     pub hosts: BTreeMap<String, HostOverride>,
+ }
+ 
+@@ -67,25 +79,61 @@ impl Settings {
+     }
+ }
+ 
+-pub(super) fn save_override(alias: &str, value: HostOverride) -> std::io::Result<()> {
++pub(super) fn save_override(key: &str, value: HostOverride) -> std::io::Result<()> {
+     let mut settings = Settings::load();
+     if value == HostOverride::default() {
+-        settings.hosts.remove(alias);
++        settings.hosts.remove(key);
+     } else {
+-        settings.hosts.insert(alias.to_owned(), value);
++        settings.hosts.insert(key.to_owned(), value);
+     }
+     settings.save()
+ }
+ 
++pub(super) fn select_route(group: &str, route: &str) -> std::io::Result<()> {
++    let mut settings = Settings::load();
++    let Some(entry) = settings.groups.get_mut(group) else {
++        return Ok(());
++    };
++    entry.selected = Some(route.to_owned());
++    settings.save()
++}
++
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(super) struct RouteChoice {
++    pub routes: Vec<String>,
++    pub selected: String,
++}
++
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub(super) struct SshHost {
++    /// The ssh alias that is actually connected to.
+     pub alias: String,
+     pub config_user: Option<String>,
+     pub custom: HostOverride,
++    /// Set for a route group: the group name, which also keys its overrides.
++    pub group: Option<String>,
++    pub route: Option<RouteChoice>,
+ }
+ 
+ impl SshHost {
++    fn single(alias: &str) -> Self {
++        Self {
++            alias: alias.to_owned(),
++            config_user: None,
++            custom: HostOverride::default(),
++            group: None,
++            route: None,
++        }
++    }
++
++    pub(super) fn key(&self) -> &str {
++        self.group.as_deref().unwrap_or(&self.alias)
++    }
++
+     pub(super) fn label(&self) -> &str {
++        if let Some(group) = self.group.as_deref() {
++            return group;
++        }
+         if self.alias.parse::<std::net::IpAddr>().is_ok() {
+             return &self.alias;
+         }
+@@ -161,17 +209,58 @@ pub(super) fn folder_error(folder: &str) -> Option<&'static str> {
+ 
+ pub(super) fn load() -> Vec<SshHost> {
+     let config = std::fs::read_to_string(glib::home_dir().join(".ssh/config")).unwrap_or_default();
+-    let mut settings = Settings::load();
+-    parse_config(&config)
+-        .into_iter()
+-        .filter(|host| !settings.hidden.contains(&host.alias))
+-        .map(|mut host| {
+-            if let Some(custom) = settings.hosts.remove(&host.alias) {
+-                host.custom = custom;
++    arrange(parse_config(&config), Settings::load())
++}
++
++/// Applies hiding, route groups, and overrides. A group takes the place of its
++/// first route alias in config order and hides its other routes.
++pub(super) fn arrange(hosts: Vec<SshHost>, mut settings: Settings) -> Vec<SshHost> {
++    let mut placed = Vec::new();
++    let mut result = Vec::new();
++    for host in &hosts {
++        let group = settings
++            .groups
++            .iter()
++            .find(|(_, group)| group.routes.values().any(|alias| *alias == host.alias));
++        let mut entry = match group {
++            Some((name, _)) if placed.contains(name) => continue,
++            Some((name, group)) => {
++                placed.push(name.clone());
++                let available: Vec<_> = group
++                    .routes
++                    .iter()
++                    .filter(|(_, alias)| hosts.iter().any(|host| host.alias == **alias))
++                    .collect();
++                let Some(&(first, _)) = available.first() else {
++                    continue;
++                };
++                let selected = group
++                    .selected
++                    .as_ref()
++                    .filter(|route| available.iter().any(|(name, _)| name == route))
++                    .unwrap_or(first);
++                let alias = &group.routes[selected];
++                let Some(target) = hosts.iter().find(|host| host.alias == *alias) else {
++                    continue;
++                };
++                SshHost {
++                    group: Some(name.clone()),
++                    route: Some(RouteChoice {
++                        routes: available.iter().map(|(name, _)| (*name).clone()).collect(),
++                        selected: selected.clone(),
++                    }),
++                    ..target.clone()
++                }
+             }
+-            host
+-        })
+-        .collect()
++            None if settings.hidden.contains(&host.alias) => continue,
++            None => host.clone(),
++        };
++        if let Some(custom) = settings.hosts.remove(entry.key()) {
++            entry.custom = custom;
++        }
++        result.push(entry);
++    }
++    result
+ }
+ 
+ pub(super) fn parse_config(config: &str) -> Vec<SshHost> {
+@@ -195,11 +284,7 @@ pub(super) fn parse_config(config: &str) -> Vec<SshHost> {
+                 let index = match hosts.iter().position(|host| host.alias == alias) {
+                     Some(index) => index,
+                     None => {
+-                        hosts.push(SshHost {
+-                            alias: alias.to_owned(),
+-                            config_user: None,
+-                            custom: HostOverride::default(),
+-                        });
++                        hosts.push(SshHost::single(alias));
+                         hosts.len() - 1
+                     }
+                 };
+-- 
+2.55.0
+

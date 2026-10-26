@@ -1,0 +1,9 @@
+asusctl
+cuda
+lib32-nvidia-utils
+libva-nvidia-driver
+nvidia-open-dkms
+nvidia-settings
+nvidia-utils
+rog-control-center
+v4l2loopback-dkms

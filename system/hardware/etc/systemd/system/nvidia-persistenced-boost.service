@@ -1,0 +1,12 @@
+[Unit]
+Description=NVIDIA persistence mode + power limit at boot
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nvidia-smi -pm 1
+ExecStart=/usr/bin/nvidia-smi -pl 95
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

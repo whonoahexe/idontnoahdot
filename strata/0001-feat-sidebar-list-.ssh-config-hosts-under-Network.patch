@@ -1,0 +1,299 @@
+From eb0a6bf9a6a42d6a8cbdf6325e16f0423290a428 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Sat, 10 Oct 2026 20:38:59 +0530
+Subject: [PATCH 1/3] feat(sidebar): list ~/.ssh/config hosts under Network
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+---
+ src/style.css                    |  16 +++++
+ src/ui/window.rs                 |  52 +++++++++++++-
+ src/ui/window/device_release.rs  |   2 +-
+ src/ui/window/ssh_hosts.rs       | 113 +++++++++++++++++++++++++++++++
+ src/ui/window/ssh_hosts/tests.rs |  36 ++++++++++
+ 5 files changed, 216 insertions(+), 3 deletions(-)
+ create mode 100644 src/ui/window/ssh_hosts.rs
+ create mode 100644 src/ui/window/ssh_hosts/tests.rs
+
+diff --git a/src/style.css b/src/style.css
+index f3562fe2..4c0beae1 100644
+--- a/src/style.css
++++ b/src/style.css
+@@ -6654,3 +6654,19 @@ popover.settings-action-library > contents {
+ .settings-dialog.modal-constrained {
+   min-width: 0;
+ }
++
++.sidebar-ssh-toggle image {
++  transition: -gtk-icon-transform 150ms ease-out;
++}
++
++.sidebar-ssh-toggle.expanded image {
++  -gtk-icon-transform: rotate(90deg);
++}
++
++.sidebar-ssh-host {
++  padding-left: 24px;
++}
++
++.sidebar-rail .sidebar-ssh-host {
++  padding-left: 8px;
++}
+diff --git a/src/ui/window.rs b/src/ui/window.rs
+index 62017485..c010b915 100644
+--- a/src/ui/window.rs
++++ b/src/ui/window.rs
+@@ -45,6 +45,7 @@ mod drive_ops;
+ mod keyboard;
+ mod open_argument;
+ mod sidebar;
++mod ssh_hosts;
+ mod unlock_argument;
+ mod volume_password;
+ 
+@@ -1483,13 +1484,15 @@ impl SidebarState {
+                     return;
+                 }
+                 let location = Location::uri("network:///");
+-                let row =
+-                    self.append_place(crate::assets::icons::NETWORK, "Network", location.clone());
++                let row = self.append_network_place(location.clone());
+                 self.add_keycap(&row, "n");
+                 self.attach_place_context_menu(&row, location, |state| {
+                     state.preference_manager.set_sidebar_show_network(false);
+                 });
+                 self.make_place_reorderable(&row, place);
++                if ssh_hosts::expanded() {
++                    self.append_ssh_hosts();
++                }
+             }
+             "recent" => {
+                 if should_show_recent_place(
+@@ -2450,6 +2453,51 @@ impl SidebarState {
+         );
+     }
+ 
++    fn append_network_place(&self, location: Location) -> gtk::Button {
++        let hosts = ssh_hosts::load();
++        if hosts.is_empty() {
++            return self.append_place(crate::assets::icons::NETWORK, "Network", location);
++        }
++        let row = sidebar_button(crate::assets::icons::NETWORK, "Network");
++        crate::ui::accessibility::set_description(&row, Some(&location.display_path()));
++        self.bind_place_row(&row, location, PlaceNavigation::Validate);
++        let expanded = ssh_hosts::expanded();
++        let toggle = gtk::Button::builder()
++            .tooltip_text(if expanded { "Hide SSH hosts" } else { "Show SSH hosts" })
++            .build();
++        toggle.set_child(Some(&crate::assets::primary_icon(
++            crate::assets::icons::CHEVRON_RIGHT,
++            14,
++        )));
++        toggle.add_css_class("sidebar-device-action");
++        toggle.add_css_class("sidebar-ssh-toggle");
++        if expanded {
++            toggle.add_css_class("expanded");
++        }
++        toggle.set_cursor_from_name(Some("pointer"));
++        toggle.set_has_frame(false);
++        toggle.set_valign(gtk::Align::Center);
++        toggle.set_width_request(24);
++        toggle.connect_clicked(|_| {
++            ssh_hosts::toggle_expanded();
++            device_release::refresh_sidebars();
++        });
++        self.widget
++            .append(&sidebar_device_row(&row, None, Some(&toggle)));
++        row
++    }
++
++    fn append_ssh_hosts(&self) {
++        for host in ssh_hosts::load() {
++            let location = host.location();
++            let row = sidebar_button(crate::assets::icons::TERMINAL, host.label());
++            row.add_css_class("sidebar-ssh-host");
++            crate::ui::accessibility::set_description(&row, Some(&location.display_path()));
++            self.bind_place_row(&row, location, PlaceNavigation::Validate);
++            self.widget.append(&row);
++        }
++    }
++
+     fn append_place(&self, icon: &str, name: &str, location: Location) -> gtk::Button {
+         let row = self.append_device_place(icon, name, location.clone(), None);
+         customize_sidebar_folder_icon(&row, &location, icon);
+diff --git a/src/ui/window/device_release.rs b/src/ui/window/device_release.rs
+index 25da6450..273b172e 100644
+--- a/src/ui/window/device_release.rs
++++ b/src/ui/window/device_release.rs
+@@ -176,7 +176,7 @@ pub(super) fn watch_sidebars(rebuild: impl Fn() + 'static) -> SidebarWatch {
+     SidebarWatch { id, _hook: hook }
+ }
+ 
+-fn refresh_sidebars() {
++pub(super) fn refresh_sidebars() {
+     let hooks: Vec<Rc<RebuildHook>> = REBUILDERS.with(|hooks| {
+         hooks
+             .borrow()
+diff --git a/src/ui/window/ssh_hosts.rs b/src/ui/window/ssh_hosts.rs
+new file mode 100644
+index 00000000..d5e5f319
+--- /dev/null
++++ b/src/ui/window/ssh_hosts.rs
+@@ -0,0 +1,113 @@
++// SPDX-License-Identifier: MIT
++
++//! SSH hosts from `~/.ssh/config`, listed under Network in the sidebar.
++
++use std::{cell::Cell, path::Path};
++
++use gtk::glib;
++
++use crate::model::Location;
++
++thread_local! {
++    static EXPANDED: Cell<bool> = const { Cell::new(false) };
++}
++
++pub(super) fn expanded() -> bool {
++    EXPANDED.with(Cell::get)
++}
++
++pub(super) fn toggle_expanded() {
++    EXPANDED.with(|expanded| expanded.set(!expanded.get()));
++}
++
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(super) struct SshHost {
++    pub alias: String,
++    pub user: Option<String>,
++}
++
++impl SshHost {
++    pub(super) fn label(&self) -> &str {
++        if self.alias.parse::<std::net::IpAddr>().is_ok() {
++            return &self.alias;
++        }
++        self.alias.split('.').next().unwrap_or(&self.alias)
++    }
++
++    /// The URI carries no user so ssh still applies the config's User, keys, and ProxyJump.
++    pub(super) fn location(&self) -> Location {
++        let user = self
++            .user
++            .clone()
++            .unwrap_or_else(|| glib::user_name().to_string_lossy().into_owned());
++        let home = if user == "root" {
++            "/root".to_owned()
++        } else {
++            format!("/home/{user}")
++        };
++        Location::uri(format!("sftp://{}{home}", self.alias))
++    }
++}
++
++pub(super) fn load() -> Vec<SshHost> {
++    let config = std::fs::read_to_string(glib::home_dir().join(".ssh/config")).unwrap_or_default();
++    let hidden = read_hidden(&glib::user_config_dir().join("strata/ssh-hosts-hidden"));
++    parse_config(&config)
++        .into_iter()
++        .filter(|host| !hidden.contains(&host.alias))
++        .collect()
++}
++
++fn read_hidden(path: &Path) -> Vec<String> {
++    std::fs::read_to_string(path)
++        .unwrap_or_default()
++        .lines()
++        .map(str::trim)
++        .filter(|line| !line.is_empty() && !line.starts_with('#'))
++        .map(str::to_owned)
++        .collect()
++}
++
++pub(super) fn parse_config(config: &str) -> Vec<SshHost> {
++    let mut hosts: Vec<SshHost> = Vec::new();
++    let mut block: Vec<usize> = Vec::new();
++    for line in config.lines() {
++        let line = line.trim();
++        if line.is_empty() || line.starts_with('#') {
++            continue;
++        }
++        let (keyword, value) = match line.split_once(|c: char| c.is_whitespace() || c == '=') {
++            Some((keyword, value)) => (keyword, value.trim_start_matches(['=', ' ', '\t']).trim()),
++            None => (line, ""),
++        };
++        if keyword.eq_ignore_ascii_case("host") {
++            block.clear();
++            for alias in value.split_whitespace() {
++                if alias.contains(['*', '?', '!']) {
++                    continue;
++                }
++                let index = match hosts.iter().position(|host| host.alias == alias) {
++                    Some(index) => index,
++                    None => {
++                        hosts.push(SshHost {
++                            alias: alias.to_owned(),
++                            user: None,
++                        });
++                        hosts.len() - 1
++                    }
++                };
++                block.push(index);
++            }
++        } else if keyword.eq_ignore_ascii_case("match") {
++            block.clear();
++        } else if keyword.eq_ignore_ascii_case("user") && !value.is_empty() {
++            for &index in &block {
++                hosts[index].user.get_or_insert_with(|| value.to_owned());
++            }
++        }
++    }
++    hosts
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/src/ui/window/ssh_hosts/tests.rs b/src/ui/window/ssh_hosts/tests.rs
+new file mode 100644
+index 00000000..109cebd1
+--- /dev/null
++++ b/src/ui/window/ssh_hosts/tests.rs
+@@ -0,0 +1,36 @@
++use super::*;
++
++#[test]
++fn parses_hosts_users_and_skips_patterns() {
++    let config = "Host studio\r\n    HostName 192.168.1.10\r\n    User alice\r\n\
++                  Host *.example a?b !neg\n  User nobody\n\
++                  Host box.tail.ts.net\n  User=root\n\
++                  Host bare\n\
++                  Match host bare\n  User ignored\n";
++    let hosts = parse_config(config);
++    let summary: Vec<_> = hosts
++        .iter()
++        .map(|host| (host.alias.as_str(), host.user.as_deref(), host.label()))
++        .collect();
++    assert_eq!(
++        summary,
++        [
++            ("studio", Some("alice"), "studio"),
++            ("box.tail.ts.net", Some("root"), "box"),
++            ("bare", None, "bare"),
++        ]
++    );
++    assert_eq!(
++        hosts[0].location(),
++        Location::uri("sftp://studio/home/alice")
++    );
++    assert_eq!(hosts[1].location(), Location::uri("sftp://box.tail.ts.net/root"));
++}
++
++#[test]
++fn first_user_wins_and_ip_labels_stay_whole() {
++    let hosts = parse_config("Host 10.0.0.5\nUser a\nHost 10.0.0.5\nUser b\n");
++    assert_eq!(hosts.len(), 1);
++    assert_eq!(hosts[0].user.as_deref(), Some("a"));
++    assert_eq!(hosts[0].label(), "10.0.0.5");
++}
+-- 
+2.55.0
+

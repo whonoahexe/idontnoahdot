@@ -1,0 +1,505 @@
+From 9d482cf3840dd9eecbc03c037d91131e3f4dc427 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Sat, 10 Oct 2026 21:03:43 +0530
+Subject: [PATCH 2/3] feat(sidebar): edit SSH host user and folder
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+---
+ src/ui/window.rs                        |  42 ++++++-
+ src/ui/window/drive_dialogs.rs          |   3 +
+ src/ui/window/drive_dialogs/ssh_host.rs | 119 ++++++++++++++++++
+ src/ui/window/ssh_hosts.rs              | 159 ++++++++++++++++++++----
+ src/ui/window/ssh_hosts/tests.rs        |  58 ++++++++-
+ 5 files changed, 352 insertions(+), 29 deletions(-)
+ create mode 100644 src/ui/window/drive_dialogs/ssh_host.rs
+
+diff --git a/src/ui/window.rs b/src/ui/window.rs
+index c010b915..20fa5455 100644
+--- a/src/ui/window.rs
++++ b/src/ui/window.rs
+@@ -2490,14 +2490,54 @@ impl SidebarState {
+     fn append_ssh_hosts(&self) {
+         for host in ssh_hosts::load() {
+             let location = host.location();
+-            let row = sidebar_button(crate::assets::icons::TERMINAL, host.label());
++            let row = sidebar_button(crate::assets::icons::TERMINAL, &host.display_name());
+             row.add_css_class("sidebar-ssh-host");
+             crate::ui::accessibility::set_description(&row, Some(&location.display_path()));
+             self.bind_place_row(&row, location, PlaceNavigation::Validate);
++            self.attach_ssh_host_menu(&row, host);
+             self.widget.append(&row);
+         }
+     }
+ 
++    fn attach_ssh_host_menu(&self, row: &gtk::Button, host: ssh_hosts::SshHost) {
++        let menu = super::accessibility::menu_box();
++        menu.add_css_class("folder-context-menu");
++        let edit = sidebar_context_option(crate::assets::icons::PENCIL, "Edit connection…", false);
++        menu.append(&edit);
++        let popover = gtk::Popover::builder()
++            .child(&menu)
++            .autohide(true)
++            .has_arrow(false)
++            .build();
++        popover.add_css_class("folder-context-popover");
++        popover.set_parent(row);
++        let view = self.view.clone();
++        let weak_popover = popover.downgrade();
++        let parent = row.clone().upcast::<gtk::Widget>();
++        edit.connect_clicked(move |_| {
++            drive_dialogs::open_from_sidebar(&view, weak_popover.upgrade().as_ref(), || {
++                drive_dialogs::show_ssh_host_dialog(&parent, &host);
++            });
++        });
++        let context = gtk::GestureClick::new();
++        context.set_button(3);
++        let weak_popover = popover.downgrade();
++        context.connect_pressed(move |gesture, _, x, y| {
++            gesture.set_state(gtk::EventSequenceState::Claimed);
++            let Some(popover) = weak_popover.upgrade() else {
++                return;
++            };
++            popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(
++                x.round() as i32,
++                y.round() as i32,
++                1,
++                1,
++            )));
++            popover.popup();
++        });
++        row.add_controller(context);
++    }
++
+     fn append_place(&self, icon: &str, name: &str, location: Location) -> gtk::Button {
+         let row = self.append_device_place(icon, name, location.clone(), None);
+         customize_sidebar_folder_icon(&row, &location, icon);
+diff --git a/src/ui/window/drive_dialogs.rs b/src/ui/window/drive_dialogs.rs
+index 83f45700..387017fe 100644
+--- a/src/ui/window/drive_dialogs.rs
++++ b/src/ui/window/drive_dialogs.rs
+@@ -22,6 +22,9 @@ use crate::{
+ use super::drive_ops::{self, FilesystemType};
+ 
+ mod format_progress;
++mod ssh_host;
++
++pub(super) use ssh_host::show_ssh_host_dialog;
+ 
+ #[cfg(test)]
+ pub(super) mod tests;
+diff --git a/src/ui/window/drive_dialogs/ssh_host.rs b/src/ui/window/drive_dialogs/ssh_host.rs
+new file mode 100644
+index 00000000..9624dadc
+--- /dev/null
++++ b/src/ui/window/drive_dialogs/ssh_host.rs
+@@ -0,0 +1,119 @@
++// SPDX-License-Identifier: MIT
++
++use std::rc::Rc;
++
++use gtk::{glib, prelude::*};
++
++use crate::{
++    assets,
++    ui::{controls::form_entry, modal::dismiss_modal_layer},
++};
++
++use super::{
++    super::{device_release, ssh_hosts},
++    field_block, inline_error, modal_shell, show_inline_error, wire_entry_submission,
++    wire_modal_close_except_confirm,
++};
++
++pub(in crate::ui::window) fn show_ssh_host_dialog(parent: &gtk::Widget, host: &ssh_hosts::SshHost) {
++    let Some(shell) = modal_shell(
++        parent,
++        assets::icons::TERMINAL,
++        "Edit connection",
++        &host.alias,
++        "Save",
++        false,
++    ) else {
++        return;
++    };
++    shell.layout.content.set_width_request(480);
++
++    let user = form_entry();
++    user.set_placeholder_text(Some(&host.default_user()));
++    user.set_text(host.custom.user.as_deref().unwrap_or_default());
++    let folder = form_entry();
++    folder.set_text(host.custom.folder.as_deref().unwrap_or_default());
++    shell.layout.body.append(&field_block("User", &user));
++    shell.layout.body.append(&field_block("Folder", &folder));
++    let hint = gtk::Label::new(Some(
++        "Leave a field blank to use the default: the user from ~/.ssh/config and their home folder.",
++    ));
++    hint.add_css_class("dim-label");
++    hint.set_max_width_chars(40);
++    hint.set_xalign(0.0);
++    hint.set_wrap(true);
++    shell.layout.body.append(&hint);
++    let error = inline_error();
++    error.set_max_width_chars(26);
++    error.set_hexpand(true);
++    shell.layout.actions.prepend(&error);
++
++    let confirm = shell.layout.confirm.clone();
++    let default_user = host.default_user();
++    let validate: Rc<dyn Fn()> = {
++        let (user, folder, confirm, error) = (
++            user.downgrade(),
++            folder.downgrade(),
++            confirm.downgrade(),
++            error.downgrade(),
++        );
++        Rc::new(move || {
++            let (Some(user), Some(folder), Some(confirm), Some(error)) = (
++                user.upgrade(),
++                folder.upgrade(),
++                confirm.upgrade(),
++                error.upgrade(),
++            ) else {
++                return;
++            };
++            let user_text = user.text();
++            let name = if user_text.trim().is_empty() {
++                default_user.clone()
++            } else {
++                user_text.trim().to_owned()
++            };
++            folder.set_placeholder_text(Some(&ssh_hosts::home_folder(&name)));
++            let problem = ssh_hosts::user_error(user_text.trim())
++                .or_else(|| ssh_hosts::folder_error(folder.text().trim()));
++            match problem {
++                Some(message) => show_inline_error(&error, message),
++                None => error.set_visible(false),
++            }
++            confirm.set_sensitive(problem.is_none());
++        })
++    };
++    validate();
++    for entry in [&user, &folder] {
++        let validate = validate.clone();
++        entry.connect_changed(move |_| validate());
++        wire_entry_submission(entry, &confirm);
++    }
++
++    let layer = shell.layer.clone();
++    let overlay = shell.overlay.clone();
++    let root = shell.blurred_root.clone();
++    let alias = host.alias.clone();
++    let (user_entry, folder_entry, error_label) = (user.clone(), folder.clone(), error.clone());
++    shell.layout.confirm.connect_clicked(move |button| {
++        if !button.is_sensitive() {
++            return;
++        }
++        let non_empty = |text: glib::GString| {
++            let text = text.trim();
++            (!text.is_empty()).then(|| text.to_owned())
++        };
++        let value = ssh_hosts::HostOverride {
++            user: non_empty(user_entry.text()),
++            folder: non_empty(folder_entry.text()),
++        };
++        match ssh_hosts::save_override(&alias, value) {
++            Ok(()) => {
++                dismiss_modal_layer(&layer, &overlay, root.as_ref());
++                device_release::refresh_sidebars();
++            }
++            Err(error) => show_inline_error(&error_label, &format!("Could not save: {error}")),
++        }
++    });
++    wire_modal_close_except_confirm(&shell);
++    user.grab_focus();
++}
+diff --git a/src/ui/window/ssh_hosts.rs b/src/ui/window/ssh_hosts.rs
+index d5e5f319..62cf0ce7 100644
+--- a/src/ui/window/ssh_hosts.rs
++++ b/src/ui/window/ssh_hosts.rs
+@@ -1,10 +1,12 @@
+ // SPDX-License-Identifier: MIT
+ 
+ //! SSH hosts from `~/.ssh/config`, listed under Network in the sidebar.
++//! Per-host user and folder overrides live in `$XDG_CONFIG_HOME/strata/ssh-hosts.toml`.
+ 
+-use std::{cell::Cell, path::Path};
++use std::{cell::Cell, collections::BTreeMap, path::PathBuf};
+ 
+ use gtk::glib;
++use serde::{Deserialize, Serialize};
+ 
+ use crate::model::Location;
+ 
+@@ -20,10 +22,66 @@ pub(super) fn toggle_expanded() {
+     EXPANDED.with(|expanded| expanded.set(!expanded.get()));
+ }
+ 
++#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
++#[serde(deny_unknown_fields)]
++pub(super) struct HostOverride {
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub user: Option<String>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub folder: Option<String>,
++}
++
++#[derive(Debug, Default, Deserialize, Serialize)]
++#[serde(deny_unknown_fields)]
++pub(super) struct Settings {
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
++    pub hidden: Vec<String>,
++    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
++    pub hosts: BTreeMap<String, HostOverride>,
++}
++
++fn settings_path() -> PathBuf {
++    glib::user_config_dir().join("strata/ssh-hosts.toml")
++}
++
++impl Settings {
++    pub(super) fn load() -> Self {
++        let Ok(contents) = std::fs::read_to_string(settings_path()) else {
++            return Self::default();
++        };
++        toml::from_str(&contents).unwrap_or_else(|error| {
++            tracing::warn!("could not parse ssh-hosts.toml: {error}");
++            Self::default()
++        })
++    }
++
++    fn save(&self) -> std::io::Result<()> {
++        let path = settings_path();
++        if let Some(parent) = path.parent() {
++            std::fs::create_dir_all(parent)?;
++        }
++        let contents = toml::to_string(self).map_err(std::io::Error::other)?;
++        let temp = path.with_extension("toml.tmp");
++        std::fs::write(&temp, contents)?;
++        std::fs::rename(temp, path)
++    }
++}
++
++pub(super) fn save_override(alias: &str, value: HostOverride) -> std::io::Result<()> {
++    let mut settings = Settings::load();
++    if value == HostOverride::default() {
++        settings.hosts.remove(alias);
++    } else {
++        settings.hosts.insert(alias.to_owned(), value);
++    }
++    settings.save()
++}
++
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub(super) struct SshHost {
+     pub alias: String,
+-    pub user: Option<String>,
++    pub config_user: Option<String>,
++    pub custom: HostOverride,
+ }
+ 
+ impl SshHost {
+@@ -34,37 +92,85 @@ impl SshHost {
+         self.alias.split('.').next().unwrap_or(&self.alias)
+     }
+ 
+-    /// The URI carries no user so ssh still applies the config's User, keys, and ProxyJump.
+-    pub(super) fn location(&self) -> Location {
+-        let user = self
+-            .user
++    pub(super) fn default_user(&self) -> String {
++        self.config_user
+             .clone()
+-            .unwrap_or_else(|| glib::user_name().to_string_lossy().into_owned());
+-        let home = if user == "root" {
+-            "/root".to_owned()
+-        } else {
+-            format!("/home/{user}")
++            .unwrap_or_else(|| glib::user_name().to_string_lossy().into_owned())
++    }
++
++    pub(super) fn user(&self) -> String {
++        self.custom.user.clone().unwrap_or_else(|| self.default_user())
++    }
++
++    pub(super) fn display_name(&self) -> String {
++        format!("{}@{}", self.user(), self.label())
++    }
++
++    pub(super) fn folder(&self) -> String {
++        let home = home_folder(&self.user());
++        match self.custom.folder.as_deref() {
++            Some(folder) => expand_folder(folder, &home),
++            None => home,
++        }
++    }
++
++    /// Without a user override the URI carries no user, so ssh applies the config's User.
++    /// Keys and ProxyJump still come from the config either way.
++    pub(super) fn location(&self) -> Location {
++        let authority = match self.custom.user.as_deref() {
++            Some(user) => format!("{user}@{}", self.alias),
++            None => self.alias.clone(),
+         };
+-        Location::uri(format!("sftp://{}{home}", self.alias))
++        let path = glib::Uri::escape_string(&self.folder(), Some("/"), true);
++        Location::uri(format!("sftp://{authority}{path}"))
++    }
++}
++
++pub(super) fn home_folder(user: &str) -> String {
++    if user == "root" {
++        "/root".to_owned()
++    } else {
++        format!("/home/{user}")
++    }
++}
++
++pub(super) fn expand_folder(folder: &str, home: &str) -> String {
++    match folder.strip_prefix('~') {
++        Some("") => home.to_owned(),
++        Some(rest) if rest.starts_with('/') => format!("{home}{rest}"),
++        _ => folder.to_owned(),
++    }
++}
++
++pub(super) fn user_error(user: &str) -> Option<&'static str> {
++    if user.is_empty() {
++        return None;
+     }
++    let valid = user
++        .chars()
++        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
++    (!valid).then_some("Use only letters, digits, dots, dashes, and underscores.")
++}
++
++pub(super) fn folder_error(folder: &str) -> Option<&'static str> {
++    if folder.is_empty() || folder.starts_with('/') || folder == "~" || folder.starts_with("~/") {
++        return None;
++    }
++    Some("Start the folder with / or ~/.")
+ }
+ 
+ pub(super) fn load() -> Vec<SshHost> {
+     let config = std::fs::read_to_string(glib::home_dir().join(".ssh/config")).unwrap_or_default();
+-    let hidden = read_hidden(&glib::user_config_dir().join("strata/ssh-hosts-hidden"));
++    let mut settings = Settings::load();
+     parse_config(&config)
+         .into_iter()
+-        .filter(|host| !hidden.contains(&host.alias))
+-        .collect()
+-}
+-
+-fn read_hidden(path: &Path) -> Vec<String> {
+-    std::fs::read_to_string(path)
+-        .unwrap_or_default()
+-        .lines()
+-        .map(str::trim)
+-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+-        .map(str::to_owned)
++        .filter(|host| !settings.hidden.contains(&host.alias))
++        .map(|mut host| {
++            if let Some(custom) = settings.hosts.remove(&host.alias) {
++                host.custom = custom;
++            }
++            host
++        })
+         .collect()
+ }
+ 
+@@ -91,7 +197,8 @@ pub(super) fn parse_config(config: &str) -> Vec<SshHost> {
+                     None => {
+                         hosts.push(SshHost {
+                             alias: alias.to_owned(),
+-                            user: None,
++                            config_user: None,
++                            custom: HostOverride::default(),
+                         });
+                         hosts.len() - 1
+                     }
+@@ -102,7 +209,7 @@ pub(super) fn parse_config(config: &str) -> Vec<SshHost> {
+             block.clear();
+         } else if keyword.eq_ignore_ascii_case("user") && !value.is_empty() {
+             for &index in &block {
+-                hosts[index].user.get_or_insert_with(|| value.to_owned());
++                hosts[index].config_user.get_or_insert_with(|| value.to_owned());
+             }
+         }
+     }
+diff --git a/src/ui/window/ssh_hosts/tests.rs b/src/ui/window/ssh_hosts/tests.rs
+index 109cebd1..12e16876 100644
+--- a/src/ui/window/ssh_hosts/tests.rs
++++ b/src/ui/window/ssh_hosts/tests.rs
+@@ -10,7 +10,7 @@ fn parses_hosts_users_and_skips_patterns() {
+     let hosts = parse_config(config);
+     let summary: Vec<_> = hosts
+         .iter()
+-        .map(|host| (host.alias.as_str(), host.user.as_deref(), host.label()))
++        .map(|host| (host.alias.as_str(), host.config_user.as_deref(), host.label()))
+         .collect();
+     assert_eq!(
+         summary,
+@@ -31,6 +31,60 @@ fn parses_hosts_users_and_skips_patterns() {
+ fn first_user_wins_and_ip_labels_stay_whole() {
+     let hosts = parse_config("Host 10.0.0.5\nUser a\nHost 10.0.0.5\nUser b\n");
+     assert_eq!(hosts.len(), 1);
+-    assert_eq!(hosts[0].user.as_deref(), Some("a"));
++    assert_eq!(hosts[0].config_user.as_deref(), Some("a"));
+     assert_eq!(hosts[0].label(), "10.0.0.5");
+ }
++
++#[test]
++fn overrides_change_user_folder_and_uri() {
++    let mut host = parse_config("Host deid.tail.ts.net\nUser noah\n").remove(0);
++    assert_eq!(host.display_name(), "noah@deid");
++
++    host.custom.user = Some("eicon".to_owned());
++    assert_eq!(host.display_name(), "eicon@deid");
++    assert_eq!(
++        host.location(),
++        Location::uri("sftp://eicon@deid.tail.ts.net/home/eicon")
++    );
++
++    host.custom.folder = Some("~/my projects".to_owned());
++    assert_eq!(
++        host.location(),
++        Location::uri("sftp://eicon@deid.tail.ts.net/home/eicon/my%20projects")
++    );
++
++    host.custom = HostOverride {
++        user: None,
++        folder: Some("/mnt/data".to_owned()),
++    };
++    assert_eq!(host.location(), Location::uri("sftp://deid.tail.ts.net/mnt/data"));
++}
++
++#[test]
++fn validates_user_and_folder_input() {
++    assert_eq!(user_error(""), None);
++    assert_eq!(user_error("eicon_2.x-y"), None);
++    assert!(user_error("a@b").is_some());
++    assert!(user_error("a b").is_some());
++    assert_eq!(folder_error(""), None);
++    assert_eq!(folder_error("/srv"), None);
++    assert_eq!(folder_error("~"), None);
++    assert_eq!(folder_error("~/code"), None);
++    assert!(folder_error("srv").is_some());
++    assert!(folder_error("~eicon").is_some());
++}
++
++#[test]
++fn settings_round_trip_and_reject_unknown_keys() {
++    let text = "hidden = [\"studio-ext\"]\n\n[hosts.deid]\nuser = \"eicon\"\n";
++    let settings: Settings = toml::from_str(text).unwrap();
++    assert_eq!(settings.hidden, ["studio-ext"]);
++    assert_eq!(settings.hosts["deid"].user.as_deref(), Some("eicon"));
++    assert_eq!(
++        toml::from_str::<Settings>(&toml::to_string(&settings).unwrap())
++            .unwrap()
++            .hosts,
++        settings.hosts
++    );
++    assert!(toml::from_str::<Settings>("[hosts.deid]\nport = 2\n").is_err());
++}
+-- 
+2.55.0
+

@@ -20,7 +20,7 @@ copy_with_backup() {
   echo "restored $dst"
 }
 
-git ls-files .config .local .bashrc .bash_profile .gitconfig .gtkrc-2.0 | while read -r f; do
+git ls-files .config .local Pictures .bashrc .bash_profile .gitconfig .gtkrc-2.0 | while read -r f; do
   copy_with_backup "$f" "$HOME/$f"
 done
 

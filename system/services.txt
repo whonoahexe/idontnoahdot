@@ -1,0 +1,16 @@
+bluetooth.service
+NetworkManager-dispatcher.service
+NetworkManager-wait-online.service
+NetworkManager.service
+nvidia-persistenced-boost.service
+power-profiles-daemon.service
+proton.VPN.service
+sddm.service
+systemd-resolved.service
+systemd-timesyncd.service
+tailscaled.service
+warp-svc.service
+docker.socket
+systemd-resolved-monitor.socket
+systemd-resolved-varlink.socket
+systemd-userdbd.socket
