@@ -1,0 +1,10 @@
+#!/bin/bash
+# Restart PipeWire if it stops answering (e.g. after a Bluetooth headset transport failure),
+# then put Bluetooth earbuds back as the default output if they're connected.
+timeout 5 pactl info >/dev/null 2>&1 && exit 0
+echo "PipeWire not responding — restarting audio stack"
+systemctl --user restart pipewire pipewire-pulse wireplumber
+sleep 4
+bt=$(timeout 5 pactl list short sinks | awk '$2 ~ /^bluez_output/ {print $2; exit}')
+[ -n "$bt" ] && pactl set-default-sink "$bt" && echo "Default output set to $bt"
+notify-send -a "Audio" "Audio was frozen" "Sound system restarted automatically." 2>/dev/null || true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Rebuild Strata from the latest release with local patches
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/strata-patched-update
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle

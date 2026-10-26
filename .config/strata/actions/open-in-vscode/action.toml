@@ -1,0 +1,20 @@
+schema_version = 1
+id = "open-in-vscode"
+name = "Open in VS Code"
+description = "Opens the folder in Visual Studio Code."
+icon = "code"
+enabled = true
+menu = "top"
+
+[when]
+kinds = ["folder"]
+min_items = 1
+max_items = 1
+
+[run]
+runtime = "command"
+program = "/usr/bin/code"
+args = ["{path}"]
+mode = "per-item"
+working_directory = "home"
+confirm = false

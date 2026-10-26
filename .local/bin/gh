@@ -1,0 +1,8 @@
+#!/bin/sh
+# gh wrapper: inside a repo, act as the account named by `git config github.user`
+# instead of whichever account is globally active. `gh auth ...` is left alone.
+if [ -z "$GH_TOKEN" ] && [ "$1" != auth ]; then
+    user=$(git config --get github.user 2>/dev/null)
+    [ -n "$user" ] && GH_TOKEN=$(/usr/bin/gh auth token -u "$user" 2>/dev/null) && export GH_TOKEN
+fi
+exec /usr/bin/gh "$@"

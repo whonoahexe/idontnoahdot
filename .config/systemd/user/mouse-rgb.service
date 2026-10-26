@@ -1,0 +1,10 @@
+[Unit]
+Description=Keep Razer DeathAdder V2 lighting at 623CEA across replugs
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/mouse-rgb-watch
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

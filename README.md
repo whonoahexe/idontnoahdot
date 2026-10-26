@@ -6,13 +6,25 @@ Personal dotfiles for my [illogical-impulse](https://github.com/end-4/dots-hyprl
 
 - `.config/hypr` — Hyprland, hypridle, hyprlock
 - `.config/matugen` — matugen config + templates that regenerate colors across every app below when the wallpaper changes
-- `.config/illogical-impulse/config.json` — ii-shell appearance/bar/lock settings (weather city redacted)
+- `.config/illogical-impulse/config.json` + `presets/` — shell appearance/bar/lock settings (weather city redacted)
+- `quickshell/` — the shell itself: [pctrade/end4-pC](https://github.com/pctrade/end4-pC) pinned to the commit in `end4-pC.base`, with my changes in `end4-pC.patch` (extra quick toggles: Left Shift, Full charge, Movie mode, Cloudflare WARP, Proton VPN; Claude usage bar widget; lock/notification/media fixes; wallpaper scene loader)
 - Terminal/shell: `kitty`, `foot`, `ghostty`, `fish`, `zshrc.d`, `starship.toml`, `.bashrc`, `.bash_profile`
 - Theming: `gtk-3.0`, `gtk-4.0`, `Kvantum`, `kde-material-you-colors`, `darklyrc`, `fontconfig`, `xsettingsd`, `.gtkrc-2.0`
 - Misc: `fuzzel` (launcher), `wlogout`, `cava`, `mpv`, `yazi`, `mimeapps.list`, `QtProject.conf`, `Trolltech.conf`, `xdg-desktop-portal`
+- `.local/bin` + `.config/systemd/user` — helper scripts and their user units: `audio-watchdog` (restarts a hung PipeWire), `suspend-unless-docked`, `gamemode-hook.sh`, `mouse-rgb-watch` (re-applies the mouse color on replug), `claude-usage`, `strata-patched-update`, and the `gh` / `git-credential-gh-account` wrappers for per-folder GitHub accounts
+- `.config/xkb` (no-left-shift keymap for the sidebar toggle), `MangoHud`, `brave-flags.conf`, `strata` (file manager settings + custom actions)
 - `plymouth/illogical-impulse` — custom boot splash theme matched to the matugen palette (not part of upstream dots-hyprland, built separately)
 
-Not included on purpose: anything with credentials/session state (SSH, GPG, browser profiles, `gh`/`npm`/`tailscale` config, KDE wallet, etc.), the vendored `quickshell` app source (comes from the `illogical-impulse-quickshell-git` package, not authored here), and KDE Plasma session leftovers unrelated to the Hyprland setup.
+Not included on purpose: anything with credentials/session state (SSH, GPG, browser profiles, `gh`/`npm`/`tailscale` config, KDE wallet, Strata's SSH hosts, etc.), work tooling, wallpapers/videos, and KDE Plasma session leftovers unrelated to the Hyprland setup.
+
+## Updating this repo
+
+```sh
+./sync.sh      # copies the live configs from $HOME in, redacts, regenerates the end4-pC patch
+git diff       # review, then commit and push
+```
+
+The list of what gets synced is `PATHS` at the top of `sync.sh`.
 
 ## Prerequisites
 
@@ -26,7 +38,7 @@ cd idontnoahdot
 ./install.sh
 ```
 
-`install.sh` copies everything into place under `$HOME`, backing up any existing file/dir it would overwrite with a `.bak-<timestamp>` suffix first. It does not touch anything boot-related.
+`install.sh` copies everything into place under `$HOME` file by file, backing up any existing file it would change with a `.bak-<timestamp>` suffix first. It also clones end4-pC into `~/.config/quickshell/end4-pC` and applies the patch (skipped if that folder exists), and enables the user units. Hyprland is already pointed at it via `hl.env("qsConfig", "end4-pC")` in `.config/hypr/custom/variables.lua`. It does not touch anything boot-related.
 
 To also restore the boot splash (needs sudo, so it's separate and not run automatically):
 

@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart PipeWire if it hangs
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/audio-watchdog

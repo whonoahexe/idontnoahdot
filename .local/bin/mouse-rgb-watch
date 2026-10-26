@@ -1,0 +1,11 @@
+#!/bin/sh
+# Re-apply the 623CEA color to the Razer DeathAdder V2 whenever it (re)connects.
+# The color isn't stored on the mouse, so any replug/USB reset wipes it.
+apply() { sleep 2; openrgb --noautoconnect --device 'Razer Deathadder V2' --mode static --color 623CEA >/dev/null 2>&1; }
+apply
+udevadm monitor --udev --subsystem-match=usb/usb_device --property | while read -r line; do
+    case "$line" in
+        ACTION=*) action=${line#ACTION=} ;;
+        PRODUCT=1532/84/*) [ "$action" = add ] && apply ;;
+    esac
+done

@@ -1,0 +1,9 @@
+#!/bin/sh
+# hypridle's idle-suspend: skip it while any external display is plugged in.
+# (Suspending while docked left the NVIDIA DP port dead on resume and the
+# closed lid then put logind into a suspend/wake loop.)
+for s in /sys/class/drm/card*-*/status; do
+    case "$s" in *-eDP-*) continue ;; esac
+    [ "$(cat "$s")" = connected ] && exit 0
+done
+systemctl suspend || loginctl suspend

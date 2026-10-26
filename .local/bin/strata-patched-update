@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Rebuild Strata from the newest stable release with the local patches on top.
+# Patches live as commits on branch local/ssh-hosts in ~/.local/src/strata.
+# Usage: strata-patched-update [--force]   (--force rebuilds even when up to date)
+set -euo pipefail
+
+SRC="$HOME/.local/src/strata"
+BRANCH="local/ssh-hosts"
+BIN="$HOME/.local/bin/strata"
+
+notify() { notify-send -a Strata -i io.github.lgse.Strata "Strata update" "$1" 2>/dev/null || true; echo "$1"; }
+
+cd "$SRC"
+git checkout -q "$BRANCH"
+git fetch -q --tags origin
+latest=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+current=$(git describe --tags --abbrev=0 --match 'v*' HEAD)
+
+if [[ $latest != "$current" ]] && ! git merge-base --is-ancestor "$latest" HEAD; then
+    echo "Rebasing patches from $current onto $latest"
+    if ! git rebase -q --onto "$latest" "$current" "$BRANCH"; then
+        git rebase --abort
+        notify "Strata $latest is out, but the local patches no longer apply. Still on $current; ask Claude to rebase them."
+        exit 1
+    fi
+elif [[ ${1:-} != --force ]]; then
+    echo "Up to date ($current with patches)"
+    exit 0
+fi
+
+tag=$(git describe --tags --abbrev=0 --match 'v*' HEAD)
+if ! nice -n 19 cargo build --release --locked; then
+    notify "Building patched Strata $tag failed. Still running the previous build."
+    exit 1
+fi
+
+[[ -f $BIN ]] && cp -p "$BIN" "$BIN.prev"
+install -m 755 target/release/strata "$BIN.new"
+mv -f "$BIN.new" "$BIN"
+notify "Patched Strata $tag installed. Restart Strata to use it."

@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Tally Anthropic API usage and estimated spend from response records saved on this machine.
+
+Offline: reads JSON files only, never calls the network. Settings live in
+~/.config/claude-usage/config.json (created with defaults on first run):
+
+  roots        directories scanned recursively for *messages.response.json records
+  prices       USD per million tokens, per model id
+  monthly_budget  optional USD figure; the bar widget turns red past it (0 = off)
+
+Usage: claude-usage            human-readable summary
+       claude-usage --json     machine-readable summary (used by the Quickshell bar widget)
+"""
+
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+CONFIG_PATH = Path.home() / ".config" / "claude-usage" / "config.json"
+
+DEFAULT_CONFIG = {
+    "roots": ["~/.local/share/protocol2rules/runs"],
+    # USD per million tokens. cache_write is the 5-minute TTL rate (1.25x input).
+    # Checked 2026-10-02; update when Anthropic's pricing page changes.
+    "prices": {
+        "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_write": 5.00, "cache_read": 0.20},
+        "claude-sonnet-5-5": {"input": 2.00, "output": 10.00, "cache_write": 2.50, "cache_read": 0.20},
+        "claude-haiku-4-5": {"input": 1.00, "output": 5.00, "cache_write": 1.25, "cache_read": 0.10},
+    },
+    "monthly_budget": 0,
+}
+
+TOKEN_FIELDS = {
+    "input": "input_tokens",
+    "output": "output_tokens",
+    "cache_write": "cache_creation_input_tokens",
+    "cache_read": "cache_read_input_tokens",
+}
+
+
+def load_config():
+    if not CONFIG_PATH.exists():
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(DEFAULT_CONFIG, indent=2) + "\n")
+        return DEFAULT_CONFIG
+    return json.loads(CONFIG_PATH.read_text())
+
+
+def empty_bucket():
+    return {"cost": 0.0, "calls": 0, **{k: 0 for k in TOKEN_FIELDS}}
+
+
+def iter_records(roots):
+    seen = set()
+    for root in roots:
+        base = Path(root).expanduser()
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*messages.response.json"):
+            try:
+                rec = json.loads(path.read_text())
+            except (OSError, ValueError):
+                continue
+            if rec.get("status") != "ok" or not isinstance(rec.get("usage"), dict):
+                continue
+            key = rec.get("request_id") or str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield rec
+
+
+def summarize(config):
+    now = datetime.now().astimezone()
+    today, month = now.date(), (now.year, now.month)
+    buckets = {"today": empty_bucket(), "month": empty_bucket(), "all": empty_bucket()}
+    unpriced, last_call = set(), None
+
+    for rec in iter_records(config["roots"]):
+        usage, model = rec["usage"], rec.get("model") or "unknown"
+        price = config["prices"].get(model)
+        if price is None:
+            unpriced.add(model)
+        tokens = {k: int(usage.get(f) or 0) for k, f in TOKEN_FIELDS.items()}
+        cost = sum(tokens[k] * price[k] for k in tokens) / 1e6 if price else 0.0
+
+        stamp = rec.get("finished_at")
+        when = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone() if stamp else None
+        if when and (last_call is None or when > last_call):
+            last_call = when
+
+        targets = ["all"]
+        if when and (when.year, when.month) == month:
+            targets.append("month")
+            if when.date() == today:
+                targets.append("today")
+        for name in targets:
+            b = buckets[name]
+            b["cost"] += cost
+            b["calls"] += 1
+            for k, v in tokens.items():
+                b[k] += v
+
+    for b in buckets.values():
+        b["cost"] = round(b["cost"], 6)
+    return {
+        **buckets,
+        "last_call": last_call.isoformat(timespec="seconds") if last_call else None,
+        "unpriced_models": sorted(unpriced),
+        "monthly_budget": config.get("monthly_budget") or 0,
+        "updated": now.isoformat(timespec="seconds"),
+    }
+
+
+def main():
+    summary = summarize(load_config())
+    if "--json" in sys.argv[1:]:
+        print(json.dumps(summary))
+        return
+    for name in ("today", "month", "all"):
+        b = summary[name]
+        print(
+            f"{name:>5}: ${b['cost']:.4f}  {b['calls']} calls  "
+            f"in {b['input']:,}  out {b['output']:,}  "
+            f"cache write {b['cache_write']:,}  cache read {b['cache_read']:,}"
+        )
+    print(f"last call: {summary['last_call'] or 'never'}")
+    if summary["unpriced_models"]:
+        print(f"no price for: {', '.join(summary['unpriced_models'])} (add them to {CONFIG_PATH})")
+
+
+if __name__ == "__main__":
+    main()

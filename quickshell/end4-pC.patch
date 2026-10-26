@@ -1,0 +1,1420 @@
+diff --git a/modules/common/functions/Session.qml b/modules/common/functions/Session.qml
+index c200e65..5097a0a 100644
+--- a/modules/common/functions/Session.qml
++++ b/modules/common/functions/Session.qml
+@@ -59,4 +59,9 @@ Singleton {
+         closeAllWindows();
+         Quickshell.execDetached(["bash", "-c", `systemctl reboot --firmware-setup || loginctl reboot --firmware-setup`]);
+     }
++
++    function rebootToWindows() {
++        closeAllWindows();
++        Quickshell.execDetached(["bash", "-c", `sudo -n /usr/local/bin/reboot-to-windows`]);
++    }
+ }
+diff --git a/modules/common/models/quickToggles/BatteryOneshotToggle.qml b/modules/common/models/quickToggles/BatteryOneshotToggle.qml
+new file mode 100644
+index 0000000..b505060
+--- /dev/null
++++ b/modules/common/models/quickToggles/BatteryOneshotToggle.qml
+@@ -0,0 +1,54 @@
++import QtQuick
++import Quickshell
++import Quickshell.Io
++import qs.services
++
++QuickToggleModel {
++    id: root
++    property int currentLimit: 0
++    property int baseLimit: 0
++
++    name: Translation.tr("Full charge")
++    // On = asusd one-shot active (current limit raised above the saved base limit)
++    toggled: currentLimit > baseLimit && baseLimit > 0
++    statusText: toggled ? Translation.tr("Charging to %1%").arg(currentLimit) : Translation.tr("Limit %1%").arg(baseLimit)
++    icon: "battery_charging_full"
++
++    mainAction: () => {
++        if (root.toggled)
++            actionProc.command = ["asusctl", "battery", "limit", `${root.baseLimit}`];
++        else
++            actionProc.command = ["asusctl", "battery", "oneshot"];
++        actionProc.running = true;
++    }
++
++    Process {
++        id: actionProc
++        onExited: fetchState.running = true
++    }
++
++    Process {
++        id: fetchState
++        running: true
++        command: ["bash", "-c", "cat /sys/class/power_supply/BAT*/charge_control_end_threshold | head -1; grep -oP 'base_charge_control_end_threshold:\\s*\\K\\d+' /etc/asusd/asusd.ron"]
++        stdout: StdioCollector {
++            id: stateCollector
++            onStreamFinished: {
++                const lines = stateCollector.text.trim().split("\n");
++                root.currentLimit = parseInt(lines[0]) || 0;
++                root.baseLimit = parseInt(lines[1]) || 0;
++                root.available = root.currentLimit > 0;
++            }
++        }
++    }
++
++    // asusd drops back to the base limit on its own once the battery is full
++    Timer {
++        interval: 30000
++        running: true
++        repeat: true
++        onTriggered: fetchState.running = true
++    }
++
++    tooltipText: Translation.tr("One-shot charge to 100% (asusctl)")
++}
+diff --git a/modules/common/models/quickToggles/CloudflareWarpToggle.qml b/modules/common/models/quickToggles/CloudflareWarpToggle.qml
+index 015010c..c7d710e 100644
+--- a/modules/common/models/quickToggles/CloudflareWarpToggle.qml
++++ b/modules/common/models/quickToggles/CloudflareWarpToggle.qml
+@@ -8,48 +8,70 @@ import Quickshell.Io
+ 
+ QuickToggleModel {
+     id: root
+-    name: Translation.tr("Cloudflare WARP")
++    // "", "connected", "connecting", "disconnected", "unregistered", "noservice", "missing"
++    property string state: ""
+ 
+-    toggled: false
++    name: Translation.tr("Cloudflare WARP")
+     icon: "cloud_lock"
+-    
++
++    available: state !== "missing" && state !== "noservice" && state !== ""
++    toggled: state === "connected" || state === "connecting"
++    statusText: {
++        switch (state) {
++            case "connected": return Translation.tr("Connected");
++            case "connecting": return Translation.tr("Connecting…");
++            case "disconnected": return Translation.tr("Disconnected");
++            case "unregistered": return Translation.tr("Not registered");
++            case "noservice": return Translation.tr("Service not running");
++            case "missing": return Translation.tr("Not installed");
++            default: return "";
++        }
++    }
++
++    function notifyFailure(message, output) {
++        Quickshell.execDetached(["notify-send",
++            Translation.tr("Cloudflare WARP"),
++            `${message}\n${output.trim()}`,
++            "-a", "Shell"
++        ])
++    }
++
+     mainAction: () => {
+-        if (toggled) {
+-            root.toggled = false
+-            Quickshell.execDetached(["warp-cli", "disconnect"])
++        if (root.state === "unregistered") {
++            registrationProc.running = true
++        } else if (root.toggled) {
++            actionProc.command = ["warp-cli", "--accept-tos", "disconnect"]
++            actionProc.running = true
+         } else {
+-            root.toggled = true
+-            Quickshell.execDetached(["warp-cli", "connect"])
++            actionProc.command = ["warp-cli", "--accept-tos", "connect"]
++            actionProc.running = true
+         }
+     }
+ 
+     Process {
+-        id: connectProc
+-        command: ["warp-cli", "connect"]
++        id: actionProc
++        stdout: StdioCollector { id: actionCollector }
++        stderr: StdioCollector { id: actionErrCollector }
+         onExited: (exitCode, exitStatus) => {
+-            if (exitCode !== 0) {
+-                Quickshell.execDetached(["notify-send", 
+-                    Translation.tr("Cloudflare WARP"), 
+-                    Translation.tr("Connection failed. Please inspect manually with the <tt>warp-cli</tt> command")
+-                    , "-a", "Shell"
+-                ])
+-            }
++            if (exitCode !== 0)
++                root.notifyFailure(Translation.tr("Command failed:"), actionCollector.text + actionErrCollector.text)
++            fetchActiveState.running = true
++            quickRefresh.restart()
+         }
+     }
+ 
+     Process {
+         id: registrationProc
+-        command: ["warp-cli", "registration", "new"]
++        command: ["warp-cli", "--accept-tos", "registration", "new"]
++        stdout: StdioCollector { id: registrationCollector }
++        stderr: StdioCollector { id: registrationErrCollector }
+         onExited: (exitCode, exitStatus) => {
+-            console.log("Warp registration exited with code and status:", exitCode, exitStatus)
+             if (exitCode === 0) {
+-                connectProc.running = true
++                actionProc.command = ["warp-cli", "--accept-tos", "connect"]
++                actionProc.running = true
+             } else {
+-                Quickshell.execDetached(["notify-send", 
+-                    Translation.tr("Cloudflare WARP"), 
+-                    Translation.tr("Registration failed. Please inspect manually with the <tt>warp-cli</tt> command"),
+-                    "-a", "Shell"
+-                ])
++                root.notifyFailure(Translation.tr("Registration failed:"), registrationCollector.text + registrationErrCollector.text)
++                fetchActiveState.running = true
+             }
+         }
+     }
+@@ -57,22 +79,43 @@ QuickToggleModel {
+     Process {
+         id: fetchActiveState
+         running: true
+-        command: ["bash", "-c", "warp-cli status"]
++        command: ["bash", "-c", "command -v warp-cli >/dev/null || { echo MISSING; exit; }; warp-cli --accept-tos status 2>&1"]
+         stdout: StdioCollector {
+             id: warpStatusCollector
+             onStreamFinished: {
+-                if (warpStatusCollector.text.length > 0) {
+-                    root.available = true
+-                }
+-                if (warpStatusCollector.text.includes("Unable")) {
+-                    registrationProc.running = true
+-                } else if (warpStatusCollector.text.includes("Connected")) {
+-                    root.toggled = true
+-                } else if (warpStatusCollector.text.includes("Disconnected")) {
+-                    root.toggled = false
+-                }
++                const text = warpStatusCollector.text
++                if (text.includes("MISSING"))
++                    root.state = "missing"
++                else if (text.includes("Registration Missing") || text.includes("Status update: Unable"))
++                    root.state = "unregistered"
++                else if (text.includes("Unable to connect") || text.includes("daemon"))
++                    root.state = "noservice"
++                else if (text.includes("Status update: Connected"))
++                    root.state = "connected"
++                else if (text.includes("Status update: Connecting"))
++                    root.state = "connecting"
++                else if (text.includes("Status update: Disconnected"))
++                    root.state = "disconnected"
++                else
++                    root.state = "noservice"
+             }
+         }
+     }
++
++    // Keep the icon honest when WARP connects/drops outside the sidebar
++    Timer {
++        interval: 5000
++        running: true
++        repeat: true
++        onTriggered: fetchActiveState.running = true
++    }
++
++    // Connecting takes a moment after `warp-cli connect` returns
++    Timer {
++        id: quickRefresh
++        interval: 1500
++        onTriggered: fetchActiveState.running = true
++    }
++
+     tooltipText: Translation.tr("Cloudflare WARP (1.1.1.1)")
+ }
+diff --git a/modules/common/models/quickToggles/LeftShiftToggle.qml b/modules/common/models/quickToggles/LeftShiftToggle.qml
+new file mode 100644
+index 0000000..ce045d6
+--- /dev/null
++++ b/modules/common/models/quickToggles/LeftShiftToggle.qml
+@@ -0,0 +1,31 @@
++import QtQuick
++import Quickshell
++import qs.modules.common
++import qs.modules.common.functions
++import qs.modules.common.models.hyprland
++import qs.services
++
++QuickToggleModel {
++    id: root
++    readonly property string keymapPath: FileUtils.trimFileProtocol(`${Directories.config}/xkb/no-left-shift.xkb`)
++
++    name: Translation.tr("Left Shift")
++    // On = left shift works; off = the no-left-shift keymap is loaded
++    toggled: !(confOpt.value && confOpt.value.length > 0 && confOpt.value !== "[[EMPTY]]")
++    icon: "shift"
++
++    mainAction: () => {
++        root.toggled = !root.toggled;
++        if (root.toggled)
++            HyprlandConfig.reset("input:kb_file");
++        else
++            HyprlandConfig.set("input:kb_file", root.keymapPath);
++    }
++
++    HyprlandConfigOption {
++        id: confOpt
++        key: "input:kb_file"
++    }
++
++    tooltipText: Translation.tr("Left Shift key")
++}
+diff --git a/modules/common/models/quickToggles/MovieModeToggle.qml b/modules/common/models/quickToggles/MovieModeToggle.qml
+new file mode 100644
+index 0000000..4df29ef
+--- /dev/null
++++ b/modules/common/models/quickToggles/MovieModeToggle.qml
+@@ -0,0 +1,59 @@
++import QtQuick
++import Quickshell
++import Quickshell.Io
++import qs.services
++
++QuickToggleModel {
++    id: root
++    property real refreshRate: 0
++    readonly property string flagFile: `${Quickshell.env("HOME")}/.local/state/hypr/movie-mode`
++
++    name: Translation.tr("Movie mode")
++    // On = ~/.local/state/hypr/movie-mode exists; monitors.lua then caps DP-1 at 144 Hz
++    statusText: refreshRate > 0 ? Translation.tr("%1 Hz").arg(Math.round(refreshRate)) : Translation.tr("No ultrawide")
++    icon: "movie"
++
++    mainAction: () => {
++        const flag = `'${root.flagFile}'`;
++        const fileCmd = root.toggled ? `rm -f ${flag}` : `mkdir -p "$(dirname ${flag})" && touch ${flag}`;
++        actionProc.command = ["bash", "-c", `${fileCmd} && hyprctl eval 'hyde_apply_layout()'`];
++        actionProc.running = true;
++    }
++
++    Process {
++        id: actionProc
++        onExited: refreshDelay.restart()
++    }
++
++    // Give Hyprland a moment to finish the modeset before reading it back
++    Timer {
++        id: refreshDelay
++        interval: 1000
++        onTriggered: fetchState.running = true
++    }
++
++    Process {
++        id: fetchState
++        running: true
++        command: ["bash", "-c", `test -e '${root.flagFile}' && echo 1 || echo 0; hyprctl monitors -j | jq -r '.[] | select(.name == "DP-1") | .refreshRate'`]
++        stdout: StdioCollector {
++            id: stateCollector
++            onStreamFinished: {
++                const lines = stateCollector.text.trim().split("\n");
++                root.toggled = lines[0] === "1";
++                root.refreshRate = parseFloat(lines[1]) || 0;
++                root.available = root.refreshRate > 0;
++            }
++        }
++    }
++
++    // Catches the ultrawide being plugged or unplugged
++    Timer {
++        interval: 10000
++        running: true
++        repeat: true
++        onTriggered: fetchState.running = true
++    }
++
++    tooltipText: Translation.tr("Cap the ultrawide at 144 Hz for smooth 24 fps movies")
++}
+diff --git a/modules/common/models/quickToggles/ProtonVpnToggle.qml b/modules/common/models/quickToggles/ProtonVpnToggle.qml
+new file mode 100644
+index 0000000..e3fa937
+--- /dev/null
++++ b/modules/common/models/quickToggles/ProtonVpnToggle.qml
+@@ -0,0 +1,123 @@
++import QtQuick
++import qs
++import qs.services
++import qs.modules.common
++import qs.modules.common.functions
++import qs.modules.common.widgets
++import Quickshell
++import Quickshell.Io
++
++QuickToggleModel {
++    id: root
++    // "", "connected", "connecting", "disconnected", "missing"
++    property string state: ""
++    // NM connection id = Proton server name, e.g. "NL-FREE#12"
++    property string server: ""
++    readonly property string countryCode: server.split(/[-#]/)[0]
++
++    readonly property var countryNames: ({
++        "US": "United States", "CA": "Canada", "MX": "Mexico", "NL": "Netherlands",
++        "CH": "Switzerland", "NO": "Norway", "PL": "Poland", "RO": "Romania",
++        "JP": "Japan", "SG": "Singapore", "UK": "United Kingdom", "GB": "United Kingdom",
++        "DE": "Germany", "FR": "France", "SE": "Sweden", "IT": "Italy", "ES": "Spain"
++    })
++
++    name: Translation.tr("Proton VPN")
++    icon: "vpn_lock"
++
++    available: state !== "missing" && state !== ""
++    toggled: state === "connected" || state === "connecting"
++    statusText: {
++        switch (state) {
++            case "connected": return countryNames[countryCode] ?? server;
++            case "connecting": return Translation.tr("Connecting…");
++            case "disconnected": return Translation.tr("Right-click: pick country");
++            case "missing": return Translation.tr("Not installed");
++            default: return "";
++        }
++    }
++
++    function notifyFailure(message, output) {
++        Quickshell.execDetached(["notify-send",
++            Translation.tr("Proton VPN"),
++            `${message}\n${output.trim()}`,
++            "-a", "Shell"
++        ])
++    }
++
++    // Two VPNs at once fight over routes and DNS
++    function disconnectWarp() {
++        Quickshell.execDetached(["bash", "-c", "command -v warp-cli >/dev/null && warp-cli --accept-tos disconnect"])
++    }
++
++    function openApp() {
++        root.disconnectWarp()
++        Quickshell.execDetached(["protonvpn-app"])
++        GlobalStates.sidebarRightOpen = false
++    }
++
++    // The CLI only lets free accounts connect to the fastest server, so
++    // picking a country goes through the GUI app
++    mainAction: () => {
++        if (root.toggled) {
++            actionProc.command = ["protonvpn", "disconnect"]
++        } else {
++            root.disconnectWarp()
++            actionProc.command = ["protonvpn", "connect"]
++            root.state = "connecting"
++        }
++        actionProc.running = true
++    }
++    altAction: () => root.openApp()
++
++    Process {
++        id: actionProc
++        stdout: StdioCollector { id: actionCollector }
++        stderr: StdioCollector { id: actionErrCollector }
++        onExited: (exitCode, exitStatus) => {
++            const output = actionCollector.text + actionErrCollector.text
++            if (output.includes("sign in") || output.includes("signin") || output.includes("Authentication"))
++                root.notifyFailure(Translation.tr("Not signed in. Right-click the toggle to sign in."), "")
++            else if (exitCode !== 0)
++                root.notifyFailure(Translation.tr("Command failed:"), output)
++            fetchActiveState.running = true
++        }
++    }
++
++    Process {
++        id: fetchActiveState
++        running: true
++        command: ["bash", "-c", "command -v protonvpn >/dev/null || { echo MISSING; exit; }; "
++            + "[ -e /sys/class/net/proton0 ] || { echo DOWN; exit; }; "
++            + "nmcli -t -g GENERAL.STATE,GENERAL.CONNECTION device show proton0"]
++        stdout: StdioCollector {
++            id: statusCollector
++            onStreamFinished: {
++                const lines = statusCollector.text.trim().split("\n")
++                const wasConnected = root.state === "connected"
++                if (lines[0] === "MISSING") {
++                    root.state = "missing"
++                } else if (lines[0].startsWith("100")) {
++                    root.state = "connected"
++                    root.server = lines[1] ?? ""
++                    // Also covers connecting from the Proton app itself
++                    if (!wasConnected) root.disconnectWarp()
++                } else if (lines[0] !== "DOWN" && /^[4-9]0/.test(lines[0])) {
++                    root.state = "connecting"
++                } else if (!actionProc.running) {
++                    root.state = "disconnected"
++                }
++            }
++        }
++    }
++
++    // Keep the icon honest when the Proton app connects/disconnects
++    Timer {
++        interval: 3000
++        running: true
++        repeat: true
++        onTriggered: fetchActiveState.running = true
++    }
++
++    tooltipText: Translation.tr("Proton VPN | Right-click to pick a country")
++}
+diff --git a/modules/common/widgets/NotificationActionButton.qml b/modules/common/widgets/NotificationActionButton.qml
+index 89b8576..586cfb8 100644
+--- a/modules/common/widgets/NotificationActionButton.qml
++++ b/modules/common/widgets/NotificationActionButton.qml
+@@ -12,13 +12,13 @@ RippleButton {
+     leftPadding: 15
+     rightPadding: 15
+     buttonRadius: Appearance.rounding.small
+-    colBackground: (urgency == NotificationUrgency.Critical) ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer4
+-    colBackgroundHover: (urgency == NotificationUrgency.Critical) ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer4Hover
+-    colRipple: (urgency == NotificationUrgency.Critical) ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer4Active
++    colBackground: (urgency == NotificationUrgency.Critical) ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer4
++    colBackgroundHover: (urgency == NotificationUrgency.Critical) ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer4Hover
++    colRipple: (urgency == NotificationUrgency.Critical) ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer4Active
+ 
+     contentItem: StyledText {
+         horizontalAlignment: Text.AlignHCenter
+         text: buttonText
+-        color: (urgency == NotificationUrgency.Critical) ? Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
++        color: (urgency == NotificationUrgency.Critical) ? Appearance.colors.colOnErrorContainer : Appearance.m3colors.m3onSurface
+     }
+ }
+\ No newline at end of file
+diff --git a/modules/common/widgets/NotificationAppIcon.qml b/modules/common/widgets/NotificationAppIcon.qml
+index 1623413..4810f05 100644
+--- a/modules/common/widgets/NotificationAppIcon.qml
++++ b/modules/common/widgets/NotificationAppIcon.qml
+@@ -22,13 +22,9 @@ MaterialShape { // App icon
+     property real smallAppIconSize: implicitSize * smallAppIconScale
+ 
+     implicitSize: 38 * scale
+-    property list<var> urgentShapes: [
+-        MaterialShape.Shape.VerySunny,
+-        MaterialShape.Shape.SoftBurst,
+-    ]
+-    shape: isUrgent ? urgentShapes[Math.floor(Math.random() * urgentShapes.length)] : MaterialShape.Shape.Circle
++    shape: isUrgent ? MaterialShape.Shape.VerySunny : MaterialShape.Shape.Circle
+ 
+-    color: isUrgent ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
++    color: isUrgent ? Appearance.colors.colErrorContainer : Appearance.colors.colSecondaryContainer
+     Loader {
+         id: materialSymbolLoader
+         active: root.appIcon == ""
+@@ -41,7 +37,7 @@ MaterialShape { // App icon
+                     "priority_high" : guessedIcon
+             }
+             anchors.fill: parent
+-            color: isUrgent ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
++            color: isUrgent ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
+             iconSize: root.materialIconSize
+             horizontalAlignment: Text.AlignHCenter
+             verticalAlignment: Text.AlignVCenter
+diff --git a/modules/common/widgets/NotificationGroup.qml b/modules/common/widgets/NotificationGroup.qml
+index 7b2cc40..39ba7e9 100644
+--- a/modules/common/widgets/NotificationGroup.qml
++++ b/modules/common/widgets/NotificationGroup.qml
+@@ -19,6 +19,12 @@ MouseArea { // Notification group area
+     property bool expanded: false
+     property bool popup: false
+     property real padding: 10
++
++    // Timeout countdown (popups only; the notification center has no timers)
++    property var newestNotification: root.notifications[root.notificationCount - 1] ?? null
++    property var timeoutTimer: root.newestNotification?.timer ?? null
++    property bool showTimeout: root.popup && root.timeoutTimer !== null
++    property real timeoutProgress: 1
+     implicitHeight: background.implicitHeight
+ 
+     property real dragConfirmThreshold: 70 // Drag further to discard notification
+@@ -39,15 +45,40 @@ MouseArea { // Notification group area
+         destroyAnimation.running = true;
+     }
+ 
++    NumberAnimation {
++        id: timeoutAnim
++        target: root
++        property: "timeoutProgress"
++        from: 1
++        to: 0
++        // Matches the Notif's own timer, so the ring can't lie about when the popup goes away
++        duration: root.timeoutTimer?.interval ?? (Config?.options.notifications.timeout ?? 7000)
++        easing.type: Easing.Linear
++        running: false
++    }
++
++    onNewestNotificationChanged: {
++        if (root.showTimeout) timeoutAnim.restart();
++    }
++
++    Component.onCompleted: {
++        if (root.showTimeout) timeoutAnim.start();
++    }
++
+     hoverEnabled: true
+     onContainsMouseChanged: {
+         if (!root.popup) return;
+-        if (root.containsMouse) root.notifications.forEach(notif => {
+-            Notifications.cancelTimeout(notif.notificationId);
+-        });
+-        else root.notifications.forEach(notif => {
+-            Notifications.timeoutNotification(notif.notificationId);
+-        });
++        if (root.containsMouse) {
++            root.notifications.forEach(notif => {
++                Notifications.cancelTimeout(notif.notificationId);
++            });
++            timeoutAnim.pause();
++        } else {
++            root.notifications.forEach(notif => {
++                Notifications.restartTimeout(notif.notificationId);
++            });
++            if (root.showTimeout) timeoutAnim.restart();
++        }
+     }
+ 
+     SequentialAnimation { // Drag finish animation
+@@ -166,6 +197,20 @@ MouseArea { // Notification group area
+                 summary: root.notificationGroup?.notifications[root.notificationCount - 1]?.summary
+                 urgency: root.notifications.some(n => n.urgency === NotificationUrgency.Critical.toString()) ? 
+                     NotificationUrgency.Critical : NotificationUrgency.Normal
++
++                ClippedOutlineCircularProgress { // Timeout countdown
++                    id: timeoutRing
++                    anchors.centerIn: parent
++                    implicitSize: parent.implicitSize + 8
++                    lineWidth: 2
++                    value: root.timeoutProgress
++                    enableAnimation: false // Driven by timeoutAnim, not its own Behavior
++                    visible: root.showTimeout
++                    colPrimary: parent.isUrgent ?
++                        Appearance.colors.colError :
++                        Appearance.colors.colOnSecondaryContainer
++                    colSecondary: ColorUtils.transparentize(colPrimary, 0.8)
++                }
+             }
+ 
+             ColumnLayout { // Content
+@@ -202,6 +247,12 @@ MouseArea { // Notification group area
+                             font.pixelSize: topRow.showAppName ?
+                                 topRow.fontSize :
+                                 Appearance.font.pixelSize.small
++                            font.family: topRow.showAppName ?
++                                Appearance.font.family.main :
++                                Appearance.font.family.title
++                            font.variableAxes: topRow.showAppName ?
++                                Appearance.font.variableAxes.main :
++                                Appearance.font.variableAxes.title
+                             color: topRow.showAppName ?
+                                 Appearance.colors.colSubtext :
+                                 Appearance.colors.colOnLayer2
+diff --git a/modules/common/widgets/NotificationItem.qml b/modules/common/widgets/NotificationItem.qml
+index 9f61cf9..e353973 100644
+--- a/modules/common/widgets/NotificationItem.qml
++++ b/modules/common/widgets/NotificationItem.qml
+@@ -14,6 +14,7 @@ Item { // Notification item area
+     property bool expanded: false
+     property bool onlyNotification: false
+     property real fontSize: Appearance.font.pixelSize.small
++    property real bodyFontSize: Appearance.font.pixelSize.smallie
+     property real padding: onlyNotification ? 0 : 8
+     property real summaryElideRatio: 0.85
+ 
+@@ -40,6 +41,8 @@ Item { // Notification item area
+     TextMetrics {
+         id: summaryTextMetrics
+         font.pixelSize: root.fontSize
++        font.family: Appearance.font.family.title
++        font.variableAxes: Appearance.font.variableAxes.title
+         text: root.notificationObject.summary || ""
+     }
+ 
+@@ -112,7 +115,7 @@ Item { // Notification item area
+         id: background
+         width: parent.width
+         anchors.left: parent.left
+-        radius: Appearance.rounding.small
++        radius: Appearance.rounding.verysmall
+         anchors.leftMargin: root.xOffset
+ 
+         Behavior on anchors.leftMargin {
+@@ -155,6 +158,8 @@ Item { // Notification item area
+                     Layout.fillWidth: summaryTextMetrics.width >= root.width * root.summaryElideRatio
+                     visible: !root.onlyNotification
+                     font.pixelSize: root.fontSize
++                    font.family: Appearance.font.family.title
++                    font.variableAxes: Appearance.font.variableAxes.title
+                     color: Appearance.colors.colOnLayer3
+                     elide: Text.ElideRight
+                     text: root.notificationObject.summary || ""
+@@ -166,7 +171,7 @@ Item { // Notification item area
+                     Behavior on opacity {
+                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                     }
+-                    font.pixelSize: root.fontSize
++                    font.pixelSize: root.bodyFontSize
+                     color: Appearance.colors.colSubtext
+                     elide: Text.ElideRight
+                     wrapMode: Text.Wrap // Needed for proper eliding????
+@@ -190,7 +195,7 @@ Item { // Notification item area
+                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                     }
+                     Layout.fillWidth: true
+-                    font.pixelSize: root.fontSize
++                    font.pixelSize: root.bodyFontSize
+                     color: Appearance.colors.colSubtext
+                     wrapMode: Text.Wrap
+                     elide: Text.ElideRight
+@@ -262,7 +267,7 @@ Item { // Notification item area
+                                     iconSize: Appearance.font.pixelSize.larger
+                                     horizontalAlignment: Text.AlignHCenter
+                                     color: (notificationObject.urgency == NotificationUrgency.Critical) ? 
+-                                        Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
++                                        Appearance.colors.colOnErrorContainer : Appearance.m3colors.m3onSurface
+                                     text: "close"
+                                 }
+                             }
+@@ -308,7 +313,7 @@ Item { // Notification item area
+                                     iconSize: Appearance.font.pixelSize.larger
+                                     horizontalAlignment: Text.AlignHCenter
+                                     color: (notificationObject.urgency == NotificationUrgency.Critical) ? 
+-                                        Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
++                                        Appearance.colors.colOnErrorContainer : Appearance.m3colors.m3onSurface
+                                     text: "content_copy"
+                                 }
+                             }
+diff --git a/modules/common/widgets/NotificationListView.qml b/modules/common/widgets/NotificationListView.qml
+index ec76349..1ade3d3 100644
+--- a/modules/common/widgets/NotificationListView.qml
++++ b/modules/common/widgets/NotificationListView.qml
+@@ -1,5 +1,6 @@
+ pragma ComponentBehavior: Bound
+ 
++import qs.modules.common
+ import qs.modules.common.widgets
+ import qs.services
+ import QtQuick
+@@ -8,9 +9,57 @@ import Quickshell
+ StyledListView { // Scrollable window
+     id: root
+     property bool popup: false
++    // Which screen edge popups slide in from: -1 = left, 1 = right, 0 = no slide (centered positions)
++    property int slideFromSide: 0
++    readonly property bool slidePopup: root.popup && root.slideFromSide !== 0
+ 
+     spacing: 3
+ 
++    // Popups are anchored to a screen edge, so they should enter from it rather than
++    // materialising in place. Non-popup lists keep StyledListView's fade+pop.
++    add: Transition {
++        animations: root.slidePopup ? [
++            Appearance.animation.sidebarSlideEnter.numberAnimation.createObject(this, {
++                "property": "x",
++                "from": root.slideFromSide * (root.width + root.removeOvershoot),
++                "to": 0,
++            }),
++            Appearance.animation.sidebarSlideEnter.numberAnimation.createObject(this, {
++                "property": "opacity",
++                "from": 0,
++                "to": 1,
++            }),
++        ] : root.animateAppearance ? [
++            Appearance.animation.elementMove.numberAnimation.createObject(this, {
++                "properties": root.popin ? "opacity,scale" : "opacity",
++                "from": 0,
++                "to": 1,
++            }),
++        ] : []
++    }
++
++    remove: Transition {
++        animations: root.slidePopup ? [
++            Appearance.animation.sidebarSlideExit.numberAnimation.createObject(this, {
++                "property": "x",
++                "to": root.slideFromSide * (root.width + root.removeOvershoot),
++            }),
++            Appearance.animation.sidebarSlideExit.numberAnimation.createObject(this, {
++                "property": "opacity",
++                "to": 0,
++            }),
++        ] : root.animateAppearance ? [
++            Appearance.animation.elementMove.numberAnimation.createObject(this, {
++                "property": "x",
++                "to": root.width + root.removeOvershoot,
++            }),
++            Appearance.animation.elementMove.numberAnimation.createObject(this, {
++                "property": "opacity",
++                "to": 0,
++            }),
++        ] : []
++    }
++
+     model: ScriptModel {
+         values: root.popup ? Notifications.popupAppNameList : Notifications.appNameList
+     }
+diff --git a/modules/ii/background/Background.qml b/modules/ii/background/Background.qml
+index d54a4b9..f0cee27 100644
+--- a/modules/ii/background/Background.qml
++++ b/modules/ii/background/Background.qml
+@@ -59,6 +59,17 @@ Variants {
+ 
+         property bool wallpaperIsVideo: bgRoot.effectiveWallpaperPath.endsWith(".mp4") || bgRoot.effectiveWallpaperPath.endsWith(".webm") || bgRoot.effectiveWallpaperPath.endsWith(".mkv") || bgRoot.effectiveWallpaperPath.endsWith(".avi") || bgRoot.effectiveWallpaperPath.endsWith(".mov")
+         property string wallpaperPath: wallpaperIsVideo ? Config.options.background.thumbnailPath : bgRoot.effectiveWallpaperPath
++        // A wallpaper can ship an animated layer as scene/Scene.qml in its folder
++        readonly property string sceneQmlPath: (wallpaperIsVideo || wallpaperPath === "") ? ""
++            : `${wallpaperPath.substring(0, wallpaperPath.lastIndexOf("/"))}/scene/Scene.qml`
++        property bool sceneAvailable: false
++        FileView {
++            path: bgRoot.sceneQmlPath
++            printErrors: false
++            onPathChanged: bgRoot.sceneAvailable = false
++            onLoaded: bgRoot.sceneAvailable = bgRoot.sceneQmlPath !== ""
++            onLoadFailed: bgRoot.sceneAvailable = false
++        }
+         property bool wallpaperSafetyTriggered: {
+             const enabled = Config.options.workSafety.enable.wallpaper;
+             const sensitiveWallpaper = (CF.StringUtils.stringListContainsSubstring(wallpaperPath.toLowerCase(), Config.options.workSafety.triggerCondition.fileKeywords));
+@@ -249,6 +260,14 @@ Variants {
+                 }
+             }
+ 
++            Loader {
++                id: sceneLoader
++                anchors.fill: parent
++                active: bgRoot.sceneAvailable
++                visible: wallpaper.visible && status === Loader.Ready
++                source: bgRoot.sceneAvailable ? `file://${bgRoot.sceneQmlPath}` : ""
++            }
++
+             ShaderEffect {
+                 id: transitionEffect
+                 anchors.fill: parent
+diff --git a/modules/ii/bar/ClaudeUsage.qml b/modules/ii/bar/ClaudeUsage.qml
+new file mode 100644
+index 0000000..98b3c41
+--- /dev/null
++++ b/modules/ii/bar/ClaudeUsage.qml
+@@ -0,0 +1,145 @@
++import QtQuick
++import QtQuick.Layouts
++import Quickshell.Io
++import qs.modules.common
++import qs.modules.common.widgets
++import qs.services
++
++// Anthropic API spend from ~/.local/bin/claude-usage (local records only, no network).
++MouseArea {
++    id: root
++
++    property bool vertical: false
++    property var usage: null
++    readonly property real monthCost: usage?.month?.cost ?? 0
++    readonly property real budget: usage?.monthly_budget ?? 0
++    readonly property bool overBudget: budget > 0 && monthCost >= budget
++
++    implicitWidth: vertical ? 36 : usageRow.implicitWidth + 12
++    implicitHeight: vertical ? usageRow.implicitHeight + 6 : 32
++
++    hoverEnabled: !Config.options.bar.tooltips.clickToShow
++    onClicked: usageProc.running = true
++
++    function formatCost(cost) {
++        const value = Math.max(0, Number(cost) || 0)
++        if (value >= 100) return `$${value.toFixed(0)}`
++        if (value >= 1) return `$${value.toFixed(2)}`
++        return `$${value.toFixed(value >= 0.1 ? 2 : 3)}`
++    }
++
++    function formatTokens(count) {
++        const value = Number(count) || 0
++        if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`
++        if (value >= 1e3) return `${(value / 1e3).toFixed(1)}k`
++        return `${value}`
++    }
++
++    Process {
++        id: usageProc
++        running: true
++        command: ["bash", "-c", "\"$HOME/.local/bin/claude-usage\" --json"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                try {
++                    root.usage = JSON.parse(text)
++                } catch (e) {
++                    root.usage = null
++                }
++            }
++        }
++    }
++
++    Timer {
++        interval: 60000
++        repeat: true
++        running: true
++        onTriggered: usageProc.running = true
++    }
++
++    RowLayout {
++        id: usageRow
++        anchors.centerIn: parent
++        spacing: 3
++
++        MaterialSymbol {
++            text: "toll"
++            iconSize: Appearance.font.pixelSize.normal
++            color: root.overBudget ? Appearance.colors.colError : Appearance.colors.colPrimary
++        }
++
++        StyledText {
++            visible: !root.vertical
++            text: root.usage ? root.formatCost(root.monthCost) : "–"
++            color: root.overBudget ? Appearance.colors.colError : Appearance.colors.colOnLayer1
++            font.pixelSize: Appearance.font.pixelSize.smaller
++            font.weight: Font.Medium
++            font.features: { "tnum": 1 }
++        }
++    }
++
++    StyledPopup {
++        hoverTarget: root
++
++        ColumnLayout {
++            implicitWidth: 280
++            spacing: 6
++
++            StyledText {
++                text: Translation.tr("Anthropic API spend (estimated)")
++                font.pixelSize: Appearance.font.pixelSize.normal
++                font.weight: Font.Medium
++                color: Appearance.colors.colOnSurfaceVariant
++            }
++
++            StyledPopupValueRow {
++                Layout.fillWidth: true
++                icon: "today"
++                label: Translation.tr("Today")
++                value: `${root.formatCost(root.usage?.today?.cost)} · ${root.usage?.today?.calls ?? 0} calls`
++            }
++            StyledPopupValueRow {
++                Layout.fillWidth: true
++                icon: "calendar_month"
++                label: Translation.tr("This month")
++                value: `${root.formatCost(root.monthCost)}${root.budget > 0 ? " / " + root.formatCost(root.budget) : ""} · ${root.usage?.month?.calls ?? 0} calls`
++            }
++            StyledPopupValueRow {
++                Layout.fillWidth: true
++                icon: "functions"
++                label: Translation.tr("All time")
++                value: `${root.formatCost(root.usage?.all?.cost)} · ${root.usage?.all?.calls ?? 0} calls`
++            }
++            StyledPopupValueRow {
++                Layout.fillWidth: true
++                icon: "data_usage"
++                label: Translation.tr("Month tokens")
++                value: `in ${root.formatTokens((root.usage?.month?.input ?? 0) + (root.usage?.month?.cache_write ?? 0) + (root.usage?.month?.cache_read ?? 0))} · out ${root.formatTokens(root.usage?.month?.output)}`
++            }
++            StyledPopupValueRow {
++                Layout.fillWidth: true
++                icon: "cached"
++                label: Translation.tr("Cache read / write")
++                value: `${root.formatTokens(root.usage?.month?.cache_read)} / ${root.formatTokens(root.usage?.month?.cache_write)}`
++            }
++            StyledPopupValueRow {
++                Layout.fillWidth: true
++                icon: "schedule"
++                label: Translation.tr("Last call")
++                value: root.usage?.last_call ? root.usage.last_call.replace("T", " ").slice(0, 16) : Translation.tr("never")
++            }
++            StyledText {
++                visible: (root.usage?.unpriced_models?.length ?? 0) > 0
++                text: Translation.tr("No price for: ") + (root.usage?.unpriced_models ?? []).join(", ")
++                color: Appearance.colors.colError
++                font.pixelSize: Appearance.font.pixelSize.smallest
++            }
++            StyledText {
++                text: root.usage ? Translation.tr("Local records only · click to refresh") : Translation.tr("claude-usage failed to run")
++                color: Appearance.colors.colOnSurfaceVariant
++                opacity: 0.6
++                font.pixelSize: Appearance.font.pixelSize.smallest
++            }
++        }
++    }
++}
+diff --git a/modules/ii/lock/LockSurface.qml b/modules/ii/lock/LockSurface.qml
+index 132664a..ed265dd 100644
+--- a/modules/ii/lock/LockSurface.qml
++++ b/modules/ii/lock/LockSurface.qml
+@@ -54,7 +54,7 @@ MouseArea {
+     }
+ 
+     // Toolbar appearing animation
+-    property real toolbarScale: 0.9
++    property real toolbarScale: 1
+     property real toolbarOpacity: 0
+     Behavior on toolbarScale {
+         NumberAnimation {
+@@ -114,7 +114,8 @@ MouseArea {
+     Loader {
+         anchors.fill: parent
+         z: -1
+-        active: WM.compositor === "niri"
++        // Off when lock blur is disabled so the live wallpaper shows through (session_lock_xray)
++        active: Config.options.lock.blur.enable
+ 
+         sourceComponent: Item {
+             anchors.fill: parent
+@@ -122,7 +123,7 @@ MouseArea {
+             Image {
+                 id: lockBgSource
+                 anchors.fill: parent
+-                source: Config.options.background.wallpaperPath
++                source: Config.options.background.thumbnailPath || Config.options.background.wallpaperPath
+                 fillMode: Image.PreserveAspectCrop
+                 asynchronous: true
+                 cache: true
+@@ -131,7 +132,7 @@ MouseArea {
+             FastBlur {
+                 anchors.fill: parent
+                 source: lockBgSource
+-                radius: 0 // fixme
++                radius: 64
+             }
+         }
+     }
+diff --git a/modules/ii/notificationPopup/NotificationPopup.qml b/modules/ii/notificationPopup/NotificationPopup.qml
+index 2352b1e..09862ab 100644
+--- a/modules/ii/notificationPopup/NotificationPopup.qml
++++ b/modules/ii/notificationPopup/NotificationPopup.qml
+@@ -48,13 +48,20 @@ Scope {
+ 
+         NotificationListView {
+             id: listview
+-            anchors.leftMargin: root.isLeft ? 4 : 0
+-            anchors.rightMargin: root.isRight ? 4 : 0
+-            anchors.topMargin: 4
+-            anchors.bottomMargin: 4
++            // elevationMargin, so StyledRectangularShadow (blur 0.9 * elevationMargin) isn't clipped by the screen edge
++            anchors.leftMargin: root.isLeft ? Appearance.sizes.elevationMargin : 0
++            anchors.rightMargin: root.isRight ? Appearance.sizes.elevationMargin : 0
++            anchors.topMargin: Appearance.sizes.elevationMargin
++            anchors.bottomMargin: Appearance.sizes.elevationMargin
+             width: Appearance.sizes.notificationPopupWidth
+             popup: true
++            slideFromSide: root.isLeft ? -1 : root.isRight ? 1 : 0
+             verticalLayoutDirection: root.isBottom ? ListView.BottomToTop : ListView.TopToBottom
++            // Each state anchors only one vertical edge, so without this the view is 0px tall and
++            // Flickable treats the whole contentHeight as scrollable - a wheel event over a popup
++            // then drags the stack off the bottom of the screen with nothing to snap it back.
++            height: Math.max(0, Math.min(contentHeight, parent.height - anchors.topMargin - anchors.bottomMargin))
++
+ 
+             states: [
+                 State {
+diff --git a/modules/ii/overlay/resources/Resources.qml b/modules/ii/overlay/resources/Resources.qml
+index 90deb90..0a12e08 100644
+--- a/modules/ii/overlay/resources/Resources.qml
++++ b/modules/ii/overlay/resources/Resources.qml
+@@ -16,26 +16,38 @@ StyledOverlayWidget {
+     id: root
+     minimumWidth: 300
+     minimumHeight: 200
+-    property list<var> resources: [
+-        {
+-            "icon": "planner_review",
+-            "name": Translation.tr("CPU"),
+-            "history": ResourceUsage.cpuUsageHistory,
+-            "maxAvailableString": ResourceUsage.maxAvailableCpuString
+-        },
+-        {
+-            "icon": "memory",
+-            "name": Translation.tr("RAM"),
+-            "history": ResourceUsage.memoryUsageHistory,
+-            "maxAvailableString": ResourceUsage.maxAvailableMemoryString
+-        },
+-        {
+-            "icon": "swap_horiz",
+-            "name": Translation.tr("Swap"),
+-            "history": ResourceUsage.swapUsageHistory,
+-            "maxAvailableString": ResourceUsage.maxAvailableSwapString
+-        },
+-    ]
++    property list<var> resources: {
++        let r = [
++            {
++                "icon": "planner_review",
++                "name": Translation.tr("CPU"),
++                "history": ResourceUsage.cpuUsageHistory,
++                "maxAvailableString": ResourceUsage.maxAvailableCpuString
++            },
++            {
++                "icon": "memory",
++                "name": Translation.tr("RAM"),
++                "history": ResourceUsage.memoryUsageHistory,
++                "maxAvailableString": ResourceUsage.maxAvailableMemoryString,
++                "usedString": ResourceUsage.usedMemoryString
++            },
++            {
++                "icon": "swap_horiz",
++                "name": Translation.tr("Swap"),
++                "history": ResourceUsage.swapUsageHistory,
++                "maxAvailableString": ResourceUsage.maxAvailableSwapString,
++                "usedString": ResourceUsage.usedSwapString
++            },
++        ]
++        if (ResourceUsage.gpuAvailable) r.push({
++            "icon": "developer_board",
++            "name": Translation.tr("GPU"),
++            "history": ResourceUsage.gpuUsageHistory,
++            "maxAvailableString": ResourceUsage.maxAvailableGpuString,
++            "usedString": ResourceUsage.usedGpuString
++        })
++        return r
++    }
+ 
+     contentItem: OverlayBackground {
+         id: contentItem
+@@ -72,6 +84,7 @@ StyledOverlayWidget {
+                 Layout.margins: 8
+                 history: root.resources[tabBar.currentIndex]?.history ?? []
+                 maxAvailableString: root.resources[tabBar.currentIndex]?.maxAvailableString ?? "--"
++                usedString: root.resources[tabBar.currentIndex]?.usedString ?? ""
+             }
+         }
+     }
+@@ -80,6 +93,7 @@ StyledOverlayWidget {
+         id: resourceSummary
+         required property list<real> history
+         required property string maxAvailableString
++        property string usedString: ""
+         Layout.fillWidth: true
+         Layout.fillHeight: true
+         spacing: 12
+@@ -95,7 +109,9 @@ StyledOverlayWidget {
+                 }
+             }
+             StyledText {
+-                text: Translation.tr("of %1").arg(resourceSummary.maxAvailableString)
++                text: resourceSummary.usedString.length > 0
++                    ? Translation.tr("%1 of %2").arg(resourceSummary.usedString).arg(resourceSummary.maxAvailableString)
++                    : Translation.tr("of %1").arg(resourceSummary.maxAvailableString)
+                 font {
+                     // family: Appearance.font.family.numbers
+                     // variableAxes: Appearance.font.variableAxes.numbers
+diff --git a/modules/ii/sessionScreen/SessionScreen.qml b/modules/ii/sessionScreen/SessionScreen.qml
+index 12e04d1..c16b0fe 100644
+--- a/modules/ii/sessionScreen/SessionScreen.qml
++++ b/modules/ii/sessionScreen/SessionScreen.qml
+@@ -189,6 +189,7 @@ Scope {
+                         }
+                         KeyNavigation.up: sessionLock
+                         KeyNavigation.right: sessionShutdown
++                        KeyNavigation.down: sessionWindowsReboot
+                     }
+                     SessionActionButton {
+                         id: sessionShutdown
+@@ -237,6 +238,20 @@ Scope {
+                         KeyNavigation.up: sessionTaskManager
+                         KeyNavigation.left: sessionReboot
+                     }
++                    SessionActionButton {
++                        id: sessionWindowsReboot
++                        buttonIcon: "laptop_windows"
++                        buttonText: Translation.tr("Restart to Windows")
++                        onClicked: {
++                            Session.rebootToWindows();
++                            sessionRoot.hide();
++                        }
++                        onFocusChanged: {
++                            if (focus)
++                                sessionRoot.subtitle = buttonText;
++                        }
++                        KeyNavigation.up: sessionHibernate
++                    }
+                 }
+ 
+                 DescriptionLabel {
+diff --git a/modules/ii/settings/pages/BarConfig.qml b/modules/ii/settings/pages/BarConfig.qml
+index 0df25c9..827868d 100644
+--- a/modules/ii/settings/pages/BarConfig.qml
++++ b/modules/ii/settings/pages/BarConfig.qml
+@@ -25,6 +25,7 @@ ContentPage {
+         { id: "resources",         name: Translation.tr("Resources"),            icon: "empty_dashboard" },
+         { id: "systemIcons",       name: Translation.tr("System Icons"),         icon: "info" },
+         { id: "networkSpeed",      name: Translation.tr("Network Speed"),        icon: "network_check" },
++        { id: "claudeUsage",       name: Translation.tr("Claude API Usage"),     icon: "toll" },
+         { id: "clockWidget",       name: Translation.tr("Clock"),                icon: "schedule" },
+         { id: "utilButtons",       name: Translation.tr("Util Buttons"),         icon: "toggle_on" },
+         { id: "sysTray",           name: Translation.tr("Tray"),                 icon: "inbox" },
+diff --git a/modules/ii/sidebarLeft/SidebarPlayerControl.qml b/modules/ii/sidebarLeft/SidebarPlayerControl.qml
+index 166e1dd..f220086 100644
+--- a/modules/ii/sidebarLeft/SidebarPlayerControl.qml
++++ b/modules/ii/sidebarLeft/SidebarPlayerControl.qml
+@@ -15,7 +15,7 @@ import Quickshell.Services.Mpris
+ 
+ Item {
+     id: root
+-    property var player: Mpris.players.values[root.currentPlayerIndex] ?? Mpris.players.values[0]
++    property var player: MprisController.activePlayer ?? Mpris.players.values[0]
+     property var artUrl: player?.trackArtUrl ?? ""
+     property string artDownloadLocation: Directories.coverArt
+     property bool showLyrics: Config.options.sidebar.media.showLyrics ?? true
+diff --git a/modules/ii/sidebarRight/quickToggles/AndroidQuickPanel.qml b/modules/ii/sidebarRight/quickToggles/AndroidQuickPanel.qml
+index 1622014..f5c2c02 100644
+--- a/modules/ii/sidebarRight/quickToggles/AndroidQuickPanel.qml
++++ b/modules/ii/sidebarRight/quickToggles/AndroidQuickPanel.qml
+@@ -29,7 +29,7 @@ AbstractQuickPanel {
+     readonly property real baseCellHeight: 56
+ 
+     readonly property list<string> availableToggleTypes: {
+-        const base = ["network", "bluetooth", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "colorPicker", "onScreenKeyboard", "mic", "audio", "notifications", "powerProfile","musicRecognition", "antiFlashbang", "vpn"]
++        const base = ["network", "bluetooth", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "colorPicker", "onScreenKeyboard", "mic", "audio", "notifications", "powerProfile","musicRecognition", "antiFlashbang", "vpn", "leftShift", "batteryOneshot", "movieMode", "protonVpn"]
+         return WM.compositor === "hyprland" ? base : base.filter(t => t !== "gameMode")
+     }
+     readonly property int columns: Config.options.sidebar.quickToggles.android.columns
+diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidBatteryOneshotToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidBatteryOneshotToggle.qml
+new file mode 100644
+index 0000000..b208624
+--- /dev/null
++++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidBatteryOneshotToggle.qml
+@@ -0,0 +1,6 @@
++import qs.modules.common.models.quickToggles
++import QtQuick
++
++AndroidQuickToggleButton {
++    toggleModel: BatteryOneshotToggle {}
++}
+diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidLeftShiftToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidLeftShiftToggle.qml
+new file mode 100644
+index 0000000..a731f17
+--- /dev/null
++++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidLeftShiftToggle.qml
+@@ -0,0 +1,6 @@
++import qs.modules.common.models.quickToggles
++import QtQuick
++
++AndroidQuickToggleButton {
++    toggleModel: LeftShiftToggle {}
++}
+diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidMovieModeToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidMovieModeToggle.qml
+new file mode 100644
+index 0000000..9a9c2cf
+--- /dev/null
++++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidMovieModeToggle.qml
+@@ -0,0 +1,6 @@
++import qs.modules.common.models.quickToggles
++import QtQuick
++
++AndroidQuickToggleButton {
++    toggleModel: MovieModeToggle {}
++}
+diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidProtonVpnToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidProtonVpnToggle.qml
+new file mode 100644
+index 0000000..9610789
+--- /dev/null
++++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidProtonVpnToggle.qml
+@@ -0,0 +1,6 @@
++import qs.modules.common.models.quickToggles
++import QtQuick
++
++AndroidQuickToggleButton {
++    toggleModel: ProtonVpnToggle {}
++}
+diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
+index 4934545..5bc0307 100644
+--- a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
++++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
+@@ -173,6 +173,70 @@ DelegateChooser {
+         isUnused: root.isUnused
+     } }
+ 
++    DelegateChoice { roleValue: "leftShift"; AndroidLeftShiftToggle {
++        required property int index
++        required property var modelData
++        buttonIndex: root.startingIndex + index
++        buttonData: modelData
++        editMode: root.editMode
++        gridRef: root.gridRef
++        expandedSize: modelData.size > 1
++        baseCellWidth: root.baseCellWidth
++        baseCellHeight: root.baseCellHeight
++        cellSpacing: root.spacing
++        cellSize: modelData.size
++        dropIndicatorRef: root.dropIndicatorRef
++        isUnused: root.isUnused
++    } }
++
++    DelegateChoice { roleValue: "batteryOneshot"; AndroidBatteryOneshotToggle {
++        required property int index
++        required property var modelData
++        buttonIndex: root.startingIndex + index
++        buttonData: modelData
++        editMode: root.editMode
++        gridRef: root.gridRef
++        expandedSize: modelData.size > 1
++        baseCellWidth: root.baseCellWidth
++        baseCellHeight: root.baseCellHeight
++        cellSpacing: root.spacing
++        cellSize: modelData.size
++        dropIndicatorRef: root.dropIndicatorRef
++        isUnused: root.isUnused
++    } }
++
++    DelegateChoice { roleValue: "movieMode"; AndroidMovieModeToggle {
++        required property int index
++        required property var modelData
++        buttonIndex: root.startingIndex + index
++        buttonData: modelData
++        editMode: root.editMode
++        gridRef: root.gridRef
++        expandedSize: modelData.size > 1
++        baseCellWidth: root.baseCellWidth
++        baseCellHeight: root.baseCellHeight
++        cellSpacing: root.spacing
++        cellSize: modelData.size
++        dropIndicatorRef: root.dropIndicatorRef
++        isUnused: root.isUnused
++    } }
++
++    DelegateChoice { roleValue: "protonVpn"; AndroidProtonVpnToggle {
++        required property int index
++        required property var modelData
++        buttonIndex: root.startingIndex + index
++        buttonData: modelData
++        editMode: root.editMode
++        gridRef: root.gridRef
++        expandedSize: modelData.size > 1
++        baseCellWidth: root.baseCellWidth
++        baseCellHeight: root.baseCellHeight
++        cellSpacing: root.spacing
++        cellSize: modelData.size
++        dropIndicatorRef: root.dropIndicatorRef
++        isUnused: root.isUnused
++    } }
++
+     DelegateChoice { roleValue: "mic"; AndroidMicToggle {
+         required property int index
+         required property var modelData
+diff --git a/services/MprisController.qml b/services/MprisController.qml
+index a9214a2..faf4607 100644
+--- a/services/MprisController.qml
++++ b/services/MprisController.qml
+@@ -85,7 +85,7 @@ Singleton {
+ 			}
+ 
+ 			function onPlaybackStateChanged() {
+-				if (root.trackedPlayer !== modelData) root.trackedPlayer = modelData;
++				if (modelData.isPlaying && root.trackedPlayer !== modelData) root.trackedPlayer = modelData;
+ 			}
+ 		}
+ 	}
+diff --git a/services/Notifications.qml b/services/Notifications.qml
+index 75c60f4..669dadd 100644
+--- a/services/Notifications.qml
++++ b/services/Notifications.qml
+@@ -72,6 +72,10 @@ Singleton {
+             }
+             const notifObject = root.list[index];
+             print("[Notifications] Notification timer triggered for ID: " + notificationId + ", transient: " + notifObject?.isTransient);
++            if (!notifObject) { // Already discarded before the timer fired
++                destroy();
++                return;
++            }
+             if (notifObject.isTransient) root.discardNotification(notificationId);
+             else root.timeoutNotification(notificationId);
+             destroy()
+@@ -231,6 +235,12 @@ Singleton {
+             root.list[index].timer.stop();
+     }
+ 
++    function restartTimeout(id) {
++        const index = root.list.findIndex((notif) => notif.notificationId === id);
++        if (root.list[index] != null && root.list[index].timer != null && root.list[index].popup)
++            root.list[index].timer.restart();
++    }
++
+     function timeoutNotification(id) {
+         const index = root.list.findIndex((notif) => notif.notificationId === id);
+         if (root.list[index] != null)
+diff --git a/services/ResourceUsage.qml b/services/ResourceUsage.qml
+index c150d3c..b867c8b 100644
+--- a/services/ResourceUsage.qml
++++ b/services/ResourceUsage.qml
+@@ -25,6 +25,8 @@ Singleton {
+     property string maxAvailableMemoryString: kbToGbString(ResourceUsage.memoryTotal)
+     property string maxAvailableSwapString: kbToGbString(ResourceUsage.swapTotal)
+     property string maxAvailableCpuString: "--"
++    property string usedMemoryString: kbToGbString(ResourceUsage.memoryUsed)
++    property string usedSwapString: kbToGbString(ResourceUsage.swapUsed)
+ 
+     readonly property int historyLength: Config?.options.resources.historyLength ?? 60
+     property list<real> cpuUsageHistory: []
+@@ -44,6 +46,14 @@ Singleton {
+ 
+     property string thermalPath: ""
+ 
++    property real gpuUsage: 0
++    property real gpuMemUsedMb: 0
++    property real gpuMemTotalMb: 1
++    property list<real> gpuUsageHistory: []
++    property string maxAvailableGpuString: "--"
++    property string usedGpuString: ""
++    property bool gpuAvailable: false
++
+     Process {
+         id: findThermalPathProc
+         running: true
+@@ -122,11 +132,16 @@ Singleton {
+         diskUsageHistory = [...diskUsageHistory, diskUsedPercentage]
+         if (diskUsageHistory.length > historyLength) diskUsageHistory.shift()
+     }
++    function updateGpuUsageHistory() {
++        gpuUsageHistory = [...gpuUsageHistory, gpuUsage]
++        if (gpuUsageHistory.length > historyLength) gpuUsageHistory.shift()
++    }
+     function updateHistories() {
+         updateMemoryUsageHistory()
+         updateSwapUsageHistory()
+         updateCpuUsageHistory()
+         updateDiskUsageHistory()
++        if (root.gpuAvailable) updateGpuUsageHistory()
+     }
+ 
+     Timer {
+@@ -154,6 +169,9 @@ Singleton {
+             }
+             root.diskTick++
+ 
++            gpuProc.running = false
++            gpuProc.running = true
++
+             const textMeminfo = fileMeminfo.text()
+             memoryTotal = Number(textMeminfo.match(/MemTotal: *(\d+)/)?.[1] ?? 1)
+             memoryFree  = Number(textMeminfo.match(/MemAvailable: *(\d+)/)?.[1] ?? 0)
+@@ -182,6 +200,27 @@ Singleton {
+     FileView { id: fileMeminfo; path: "/proc/meminfo" }
+     FileView { id: fileStat;    path: "/proc/stat" }
+ 
++    Process {
++        id: gpuProc
++        command: ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const parts = text.trim().split(",").map(s => parseFloat(s.trim()))
++                if (parts.length >= 3 && !isNaN(parts[0])) {
++                    root.gpuAvailable = true
++                    root.gpuUsage = parts[0] / 100
++                    root.gpuMemUsedMb = parts[1]
++                    root.gpuMemTotalMb = parts[2]
++                    root.maxAvailableGpuString = (parts[2] / 1024).toFixed(1) + " GB"
++                    root.usedGpuString = (parts[1] / 1024).toFixed(1) + " GB"
++                }
++            }
++        }
++        onExited: (exitCode) => {
++            if (exitCode !== 0) root.gpuAvailable = false
++        }
++    }
++
+     Process {
+         id: findCpuMaxFreqProc
+         environment: ({ LANG: "C", LC_ALL: "C" })

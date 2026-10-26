@@ -1,9 +1,15 @@
 [credential "https://github.com"]
 	helper = 
-	helper = !/usr/bin/gh auth git-credential
+	helper = gh-account
 [credential "https://gist.github.com"]
 	helper = 
 	helper = !/usr/bin/gh auth git-credential
 [user]
 	email = whonoah.exe@gmail.com
 	name = noah
+[github]
+	user = whonoahexe
+
+# Per-org identities: must stay last so they override the defaults above
+[includeIf "gitdir:~/Work/Ibis/"]
+	path = ~/.config/git/ibis.gitconfig

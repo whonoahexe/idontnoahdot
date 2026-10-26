@@ -130,6 +130,9 @@ x-scheme-handler/mmsh=io.github.celluloid_player.Celluloid.desktop
 x-scheme-handler/rtmp=io.github.celluloid_player.Celluloid.desktop
 x-scheme-handler/rtp=io.github.celluloid_player.Celluloid.desktop
 x-scheme-handler/rtsp=io.github.celluloid_player.Celluloid.desktop
-inode/directory=kitty-open.desktop
+inode/directory=io.github.lgse.Strata.desktop
+text/markdown=org.gnome.gitlab.somas.Apostrophe.desktop
+text/x-markdown=org.gnome.gitlab.somas.Apostrophe.desktop
+text/plain=vim.desktop
 
 [Added Associations]

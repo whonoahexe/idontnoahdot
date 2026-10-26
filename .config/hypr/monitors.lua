@@ -11,6 +11,8 @@
 --   AC,      external     -> eDP-1 disabled, external @ auto max res/refresh, performance
 --   battery, no external -> eDP-1 @ 1920x1080@60,                      power-saver
 --   battery, external     -> eDP-1 disabled, external @ auto max res/refresh, power-saver
+-- "external" here means the docked ultrawide on DP-1 only. Any other output
+-- (e.g. HDMI to a TV/projector) extends the desktop to the right of eDP-1.
 -- Power profile tracks power source only; external-monitor presence
 -- doesn't affect it.
 
@@ -21,17 +23,6 @@ local EXTERNAL = "DP-1"
 -- by the watcher script. Defaults to "ac" until the watcher's first check runs.
 _G.hyde_power_state = _G.hyde_power_state or "ac"
 
-local function external_connected()
-    for _, m in ipairs(hl.get_monitors()) do
-        -- "FALLBACK" is Hyprland's synthetic placeholder output when no real
-        -- monitor is enabled — it must not count as an external monitor.
-        if m.name ~= INTERNAL and m.name ~= "FALLBACK" then
-            return true
-        end
-    end
-    return false
-end
-
 local function get_monitor(name)
     for _, m in ipairs(hl.get_monitors()) do
         if m.name == name then
@@ -41,14 +32,27 @@ local function get_monitor(name)
     return nil
 end
 
+local function external_connected()
+    return get_monitor(EXTERNAL) ~= nil
+end
+
+-- Movie mode: while this file exists, the external monitor is capped at
+-- 144 Hz (an exact multiple of 24 fps film, so no 3:2-style judder).
+-- Toggled from the sidebar (MovieModeToggle.qml), which creates/removes the
+-- file and then calls `hyde_apply_layout()`.
+local MOVIE_MODE_FILE = os.getenv("HOME") .. "/.local/state/hypr/movie-mode"
+local MOVIE_MODE_MAX_REFRESH = 144.5
+
 -- Picks the mode with the largest resolution; among ties, the highest
--- refresh rate. `available_modes` entries are tables:
--- {width, height, refresh_rate, preferred}.
-local function best_mode(available_modes)
+-- refresh rate (at most `max_refresh` when given). `available_modes`
+-- entries are tables: {width, height, refresh_rate, preferred}.
+local function best_mode(available_modes, max_refresh)
     local best, best_area, best_refresh = nil, -1, -1
     for _, entry in ipairs(available_modes or {}) do
         local area = entry.width * entry.height
-        if area > best_area or (area == best_area and entry.refresh_rate > best_refresh) then
+        if max_refresh and entry.refresh_rate > max_refresh then
+            -- skip modes above the cap
+        elseif area > best_area or (area == best_area and entry.refresh_rate > best_refresh) then
             best, best_area, best_refresh = entry, area, entry.refresh_rate
         end
     end
@@ -67,7 +71,8 @@ local function apply_layout()
 
     if external_connected() then
         local ext = get_monitor(EXTERNAL)
-        local mode = ext and best_mode(ext.available_modes) or "preferred"
+        local max_refresh = is_file_exists(MOVIE_MODE_FILE) and MOVIE_MODE_MAX_REFRESH or nil
+        local mode = ext and best_mode(ext.available_modes, max_refresh) or "preferred"
         hl.monitor({
             output = INTERNAL,
             disabled = true,
@@ -97,3 +102,8 @@ apply_layout()
 
 hl.on("monitor.added", apply_layout)
 hl.on("monitor.removed", apply_layout)
+
+hl.monitor({
+    output = "eDP-1",
+    bitdepth = 8,
+})
