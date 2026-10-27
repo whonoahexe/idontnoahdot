@@ -16,6 +16,12 @@ hl.env("LIBVA_DRIVER_NAME", "nvidia")
 hl.env("GBM_BACKEND", "nvidia-drm")
 hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
 
+-- Open/Save dialogs go through xdg-desktop-portal, whose FileChooser is Strata
+-- (~/.config/xdg-desktop-portal/hyprland-portals.conf). Chromium/Electron use the
+-- portal on their own; plain GTK apps only when told to (GTK3, GTK4).
+hl.env("GTK_USE_PORTAL", "1")
+hl.env("GDK_DEBUG", "portals")
+
 -- monitors.lua (from end4) uses this helper from end4's hyprland/lib
 if not is_file_exists then
     function is_file_exists(name)

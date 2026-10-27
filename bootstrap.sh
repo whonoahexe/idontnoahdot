@@ -117,6 +117,14 @@ if [ ! -x "$HOME/.local/bin/strata" ]; then
   "$HOME/.local/bin/strata-patched-update" --force || warn "Strata build failed; run strata-patched-update --force later"
 fi
 
+# Strata as the Open/Save dialog everywhere: registers its xdg-desktop-portal FileChooser backend (D-Bus service +
+# .portal under ~/.local/share). hyprland-portals.conf from the dots already prefers it (strata;kde), and the
+# GTK_USE_PORTAL / GDK_DEBUG=portals env in both rices' Hyprland configs sends plain GTK apps through the portal too
+if [ -x "$HOME/.local/bin/strata" ] && [ ! -f "$HOME/.local/share/xdg-desktop-portal/portals/strata.portal" ]; then
+  step "Making Strata the system file picker"
+  "$HOME/.local/bin/strata" --install-portal || warn "Portal setup failed; run strata --install-portal after logging in"
+fi
+
 if ! command -v claude >/dev/null && [ ! -x "$HOME/.local/bin/claude" ]; then
   step "Installing Claude Code"
   curl -fsSL https://claude.ai/install.sh | bash || warn "Claude Code install failed"

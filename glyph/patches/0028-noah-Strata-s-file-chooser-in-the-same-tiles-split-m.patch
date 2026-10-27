@@ -1,0 +1,53 @@
+From 597e59eb1bc1016618d3a33a4e01a5bcb3c8b2e0 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 18:39:19 +0530
+Subject: [PATCH] noah: Strata's file chooser in the same tiles (split matched
+ without the sidebar-split class), black footer, Glyph pill buttons for its
+ and the app's dialogs
+
+---
+ config/quickshell/glyph/term/gtk-4.0/gtk.css | 21 ++++++++++++++++----
+ 1 file changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/config/quickshell/glyph/term/gtk-4.0/gtk.css b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+index fcf9f83..62523c0 100644
+--- a/config/quickshell/glyph/term/gtk-4.0/gtk.css
++++ b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+@@ -50,13 +50,14 @@
+    a rounded s1 tile on it (the preview slot keeps its width when empty, so it stays a second tile), no hairlines; the
+    3px white "active column" bar goes, the column's caps label lights up instead. Strata sizes the columns pane to fit
+    its columns exactly, so the gaps sit on the sidebar's and preview's side, never inside or right of the listing.
++   The file chooser (`strata --portal`) has the same split without the sidebar-split class, hence `.preview-split > paned`.
+    headerbar is unscoped but only restates headerbar_bg_color/border above */
+ headerbar { background: #000000; border-bottom: none; box-shadow: none; }
+-.preview-split, .sidebar-split, .sidebar-shell, .sidebar-scroll viewport, .sidebar { background: #000000; }
++.preview-split, .preview-split > paned, .sidebar-shell, .sidebar-scroll viewport, .sidebar { background: #000000; }
+ .sidebar-shell { border-right: none; padding-right: 6px; }
+-.sidebar-split > separator, .sidebar-split > separator.wide, .preview-split > separator { background: none; box-shadow: none; }
+-.sidebar-split > separator + overlay, .preview-split > separator + * { background: #0E0E0E; border-radius: 28px; margin-bottom: 12px; }
+-.sidebar-split > separator + overlay { padding: 8px 0 14px; }
++.preview-split > paned > separator, .preview-split > paned > separator.wide, .preview-split > separator { background: none; box-shadow: none; }
++.preview-split > paned > separator + overlay, .preview-split > separator + * { background: #0E0E0E; border-radius: 28px; margin-bottom: 12px; }
++.preview-split > paned > separator + overlay { padding: 8px 0 14px; }
+ .preview-split > separator + * { margin: 0 12px 12px; }
+ .preview-pane { background: none; padding-bottom: 14px; }
+ .preview-header { border-bottom: none; }
+@@ -92,3 +93,15 @@ headerbar button.header-action, headerbar menubutton.header-action > button { bo
+ .location-entry, .location-entry text, .inline-rename, .inline-rename text, .column-filter-entry, .column-filter-entry text,
+ .search-field, .search-field text, .preview-command-entry, .preview-command-entry text { caret-color: #D71921; }
+ .modal-progress progress, .job-progress progress { background: #D71921; }
++/* chooser footer (name field, filters, Cancel/Save) on the black chrome; dialog buttons are Glyph pills: white for the
++   answer, outlined for Cancel, red only when the answer destroys something */
++.chooser-details, .chooser-actions { background: #000000; border-top: none; }
++.chooser-details { padding: 4px 18px 8px; }
++.chooser-actions { padding: 4px 18px 14px; }
++.chooser-details label { font-family: "Space Mono", monospace; color: #8C8C8C; }
++.action-dialog-confirm, .action-dialog-cancel { border-radius: 999px; padding-left: 18px; padding-right: 18px; }
++.action-dialog-confirm { background: #F2F2F2; border-color: #F2F2F2; color: #000000; }
++.action-dialog-confirm:hover { background: #FFFFFF; border-color: #FFFFFF; color: #000000; }
++.action-dialog-confirm.danger, .action-dialog-confirm.danger:hover { background: #D71921; border-color: #D71921; color: #F2F2F2; }
++.action-dialog-confirm:disabled { background: #2A2A2A; border-color: #2A2A2A; color: #8C8C8C; }
++.action-dialog-cancel { border-color: #2A2A2A; }
+-- 
+2.55.0
+
