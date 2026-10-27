@@ -1,0 +1,838 @@
+From a5a3a51db5fa1359101a5cbe23ea3b8555e0f450 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 15:07:12 +0530
+Subject: [PATCH 14/24] =?UTF-8?q?noah:=20Super+P=20panel=20runs=20Cloudfla?=
+ =?UTF-8?q?re=20WARP=20+=20Proton=20VPN=20free=20instead=20of=20Clash=20Ve?=
+ =?UTF-8?q?rge=20=E2=80=94=20pills,=20WARP=20modes,=20tunnel=20traffic,=20?=
+ =?UTF-8?q?exit=20ip/place,=20link=20quality,=20portal=20handling;=20Quick?=
+ =?UTF-8?q?=20tile=20drops=20Proton=20before=20WARP?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/Sys.qml     |  18 +-
+ config/quickshell/glyph/Theme.qml   |   1 +
+ config/quickshell/glyph/shell.qml   |   2 +-
+ config/quickshell/glyph/vpn/Vpn.qml | 565 +++++++++++++---------------
+ 4 files changed, 276 insertions(+), 310 deletions(-)
+
+diff --git a/config/quickshell/glyph/Sys.qml b/config/quickshell/glyph/Sys.qml
+index 4508ac0..10c05a6 100644
+--- a/config/quickshell/glyph/Sys.qml
++++ b/config/quickshell/glyph/Sys.qml
+@@ -6,7 +6,6 @@ import Quickshell.Bluetooth
+ import Quickshell.Hyprland
+ import Quickshell.Io
+ import Quickshell.Services.Pipewire
+-import Quickshell.Services.SystemTray
+ import Quickshell.Wayland
+ import qs.services
+ import qs.settings
+@@ -60,22 +59,27 @@ Singleton {
+     property bool rec: false
+     readonly property bool night: Rules.store.night
+     property bool air: false
+-    // noah: WARP for the vpn tile, polled too since warp-cli or end4's sidebar can flip it
++    // noah: tunnels for the vpn tile and panel (vpn/), polled too since warp-cli, protonvpn or end4's sidebar can flip them.
++    // proton — по интерфейсу: protonvpn status — питон, полсекунды CPU
+     property bool vpn: false
++    property bool proton: false
+     Process {
+         id: poll
+         command: ["sh", "-c", "pgrep -f '^gpu-screen-recorder' >/dev/null && echo rec; "
+                             + "rfkill -rno SOFT | grep -qv '^blocked' || echo air; "
+-                            + "warp-cli --accept-tos status 2>/dev/null | grep -q 'Status update: Connected' && echo warp"]
++                            + "warp-cli --accept-tos status 2>/dev/null | grep -q 'Status update: Connected' && echo warp; "
++                            + "[ -e /sys/class/net/proton0 ] && echo proton"]
+         stdout: StdioCollector {
+             onStreamFinished: {
+                 root.rec = text.includes("rec");
+                 root.air = text.includes("air");
+                 root.vpn = text.includes("warp");
++                root.proton = text.includes("proton");
+             }
+         }
+     }
+     Timer { running: true; repeat: true; interval: 3000; triggeredOnStart: true; onTriggered: poll.running = true }
++    function repoll() { poll.running = true; } // noah: vpn/ after its own connect/disconnect
+ 
+     function sh(c) { Quickshell.execDetached(["sh", "-c", c]); }
+     // настройки записи из Theme.state (quick/Rec) → флаги gpu-screen-recorder; их же берёт скриншотилка
+@@ -132,7 +136,9 @@ Singleton {
+         }
+     }
+ 
+-    // ---- vpn: noah: the Quick tile drives Cloudflare WARP (state in the poll above); verge stays for the vpn/ panel (Super+P) ----
+-    readonly property var verge: SystemTray.items.values.find(i => i.title === "clash-verge" || i.id.includes("clash-verge")) ?? null
+-    function toggleVpn() { Quickshell.execDetached(["warp-cli", "--accept-tos", vpn ? "disconnect" : "connect"]); vpn = !vpn; }
++    // ---- vpn: noah: the Quick tile drives Cloudflare WARP (state in the poll above); Proton is dropped first, two tunnels fight ----
++    function toggleVpn() {
++        sh(vpn ? "warp-cli --accept-tos disconnect" : `${proton ? "protonvpn disconnect >/dev/null 2>&1; " : ""}warp-cli --accept-tos connect`);
++        vpn = !vpn;
++    }
+ }
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index ad4f997..b48adec 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -96,6 +96,7 @@ Singleton {
+             property int recFps: 60
+             property int recQuality: 2     // medium, high, very_high, ultra
+             property bool recCursor: true
++            property string vpnLast: "warp" // noah: vpn/ ring brings back the last tunnel used: warp | proton
+             property bool clipRaw: false   // noah: clip/ image preview in original colours instead of dots (Ctrl+O / click)
+         }
+     }
+diff --git a/config/quickshell/glyph/shell.qml b/config/quickshell/glyph/shell.qml
+index 3ff7c5f..1fbd795 100644
+--- a/config/quickshell/glyph/shell.qml
++++ b/config/quickshell/glyph/shell.qml
+@@ -111,7 +111,7 @@ ShellRoot {
+     Shortcut { name: "settings"; description: "настройки"; onPressed: prefs.toggle() }
+     Shortcut { name: "power"; description: "меню питания"; onPressed: power.visible ? power.close() : power.open() }
+     Shortcut { name: "shot"; description: "скриншот"; onPressed: shot.open() }
+-    Shortcut { name: "pact"; description: "vpn: clash verge"; onPressed: vpn.toggle() }
++    Shortcut { name: "pact"; description: "vpn: warp / proton"; onPressed: vpn.toggle() }
+     Shortcut { name: "clip"; description: "буфер обмена"; onPressed: clip.toggle() }
+     Shortcut { name: "charms"; description: "эмодзи, каомодзи, символы"; onPressed: charms.toggle() }
+     Shortcut { name: "wall"; description: "обои"; onPressed: walls.toggle() }
+diff --git a/config/quickshell/glyph/vpn/Vpn.qml b/config/quickshell/glyph/vpn/Vpn.qml
+index 21c89e1..bd8c529 100644
+--- a/config/quickshell/glyph/vpn/Vpn.qml
++++ b/config/quickshell/glyph/vpn/Vpn.qml
+@@ -6,193 +6,164 @@ import Quickshell.Wayland
+ import qs
+ import qs.components
+ 
+-// vpn: Super+P. Всё из Clash Verge, как договор в demonshot: тумблеры, режим, узлы и пинг — пункты его же трея (verge в курсе),
+-// профиль — из его profiles.yaml, трафик и соединения — с сокета ядра (mihomo).
+-// Панель 1040 по центру. Слева кольцо из 60 точек — туннель: горит, пока включён System proxy или TUN, красная точка в центре — живой.
+-// Под ним пилюли System/TUN, чипы режима, профиль. Справа скорость Doto, трафик матрицей, узлы с пингом сегментами; выбранный — белый
++// vpn: Super+P. noah: Cloudflare WARP (warp-cli) and Proton VPN free (protonvpn CLI) instead of Clash Verge, same look.
++// Panel 1040 centred. Left: the ring of 60 dots is the tunnel — lit while one is up, red dot in the middle while live;
++// under it WARP / Proton pills (one at a time), WARP mode chips, link quality. Right: speed in Doto, traffic as a matrix
++// (bytes of the tunnel interface), then where the tunnel comes out: exit ip, place, server, protocol
+ PanelWindow {
+     id: root
+ 
+-    // ---- verge: трей ----
+-    readonly property var verge: Sys.verge
+-    // ponytail: пункты трея ищем по английским подписям (language: en в verge); другой язык — поменять строки тут
+-    function child(op, pre) { return op.children.values.find(e => e.text.startsWith(pre)) ?? null; }
+-    function checked(op, pre) { return child(op, pre)?.checkState === Qt.Checked; }
+-    QsMenuOpener { id: tray; menu: root.verge?.menu ?? null }
+-    QsMenuOpener { id: modes; menu: root.child(tray, "Outbound Modes") }
+-    QsMenuOpener { id: proxies; menu: root.child(tray, "Proxies") }
+-    QsMenuOpener { id: grp; menu: proxies.children.values.find(e => e.hasChildren) ?? null }
++    // ---- which tunnel: Sys polls both every 3 s; here more detail while the panel is open ----
++    readonly property string iface: Sys.proton ? "proton0" : Sys.vpn ? "CloudflareWARP" : ""
++    readonly property string which: Sys.proton ? "proton" : Sys.vpn ? "warp" : ""
++    readonly property bool live: which !== ""
++    property string busy: ""       // "warp" | "proton" | "off" while a command runs
++    property string warpState: ""  // Connected | Connecting | Disconnected (warp-cli)
++    readonly property bool connected: busy ? busy !== "off" : live
+ 
+-    readonly property bool sys: checked(tray, "System Proxy")
+-    readonly property bool tun: checked(tray, "TUN Mode")
+-    readonly property var modeNames: ["Rule", "Global", "Direct"]
+-    readonly property int mode: modeNames.findIndex(m => checked(modes, m))
+-    readonly property string group: (proxies.children.values.find(e => e.hasChildren)?.text ?? "proxy").toLowerCase()
++    // warp-cli mode: tunnel with plain DNS, tunnel with DoH, or only DoH without a tunnel
++    readonly property var modeNames: ["warp", "warp+doh", "doh"]
++    readonly property var modeLabels: ["warp", "+doh", "doh"]
++    property int mode: -1
+ 
+-    // узел из пункта трея «TCP PL 🇵🇱⚡️-NODE🐸   | 48ms»: код страны из флага, имя без транспорта и эмодзи, пинг
+-    readonly property var transports: ["tcp", "xhttp", "ws", "grpc", "h2", "http", "httpupgrade", "splithttp", "quic", "kcp", "reality", "hy2", "tuic"]
+-    readonly property var builtin: ({ DIRECT: ["Direct", "no proxy"], REJECT: ["Reject", "blocked"] })
+-    function way(e) {
+-        const m = /^(.*?)\s*\|\s*(\S*?)\s*ms$/.exec(e.text), label = (m?.[1] ?? e.text).trim(), b = builtin[label];
+-        const flag = [...label].map(c => c.codePointAt(0)).filter(c => c >= 0x1F1E6 && c <= 0x1F1FF).map(c => String.fromCharCode(c - 0x1F1E6 + 65)).join("");
+-        const words = label.replace(/[^\x20-\x7E]/g, " ").split(/[\s\-_|·]+/).filter(Boolean);
+-        const cc = b ? "—" : flag || words.find(w => /^[A-Z]{2}$/.test(w)) || "··";
+-        const via = words.find(w => transports.includes(w.toLowerCase()))?.toLowerCase();
+-        const name = words.filter(w => w !== cc && !transports.includes(w.toLowerCase())).map(w => w[0] + w.slice(1).toLowerCase()).join(" ");
+-        return {
+-            entry: e, cc, on: e.checkState === Qt.Checked,
+-            name: b ? b[0] : name || label,
+-            sub: b ? b[1] : [via, ...(kinds[label] ?? [])].filter(Boolean).join(" · "),
+-            ms: b ? 0 : parseInt(m?.[2])
+-        };
++    // ---- actions: one at a time; the other tunnel goes down first, two tunnels fight over routes and DNS ----
++    Process {
++        id: act
++        onExited: { root.busy = ""; Sys.repoll(); root.refresh(); }
+     }
+-    readonly property var ways: grp.children.values.filter(e => !e.isSeparator && e.buttonType !== QsMenuButtonType.None).map(e => way(e))
+-
+-    // нажать пункт трея; несколько — по очереди: verge после каждого пересобирает меню
+-    property var queue: []
+-    function press(label) {
+-        queue = queue.concat([label]);
+-        if (!presser.running) presser.start();
++    function run(b, c) {
++        if (act.running) return;
++        busy = b;
++        act.command = ["sh", "-c", c];
++        act.running = true;
+     }
+-    Timer {
+-        id: presser
+-        interval: 350
+-        repeat: true
+-        triggeredOnStart: true
+-        onTriggered: {
+-            const [l, ...rest] = root.queue;
+-            root.queue = rest;
+-            root.child(tray, l)?.triggered();
+-            if (!rest.length) stop();
+-        }
++    function warp() {
++        if (which === "warp") run("off", "warp-cli --accept-tos disconnect");
++        else run("warp", "protonvpn disconnect >/dev/null 2>&1; warp-cli --accept-tos connect; "
++                       + "for i in $(seq 20); do warp-cli --accept-tos status | grep -q 'Status update: Connected' && exit; sleep 0.5; done");
+     }
+-    function go(i) { const w = ways[i]; if (w && !w.on) w.entry.triggered(); }
+-    function route(i) { child(modes, modeNames[i])?.triggered(); }
+-    property bool pinging: false
+-    function ping() { child(grp, "Test Latency")?.triggered(); pinging = true; pingT.restart(); }
+-    Timer { id: pingT; interval: 2500; onTriggered: root.pinging = false }
+-
+-    // ---- туннель: System proxy или TUN. Выключил — гаснут оба, включил — вернулись те, что были ----
+-    readonly property bool live: sys || tun
+-    property var kept: ["System Proxy", "TUN Mode"] // что вернуть при включении
+-    property int want: -1                           // пока verge не догнал: 1 — включаем, 0 — выключаем
+-    readonly property bool connected: want >= 0 ? want === 1 : live
+-    onLiveChanged: want = -1
+-    Timer { id: wantT; interval: 5000; onTriggered: root.want = -1 } // verge промолчал — показываем как есть
++    // free plan: no country, no random — only "fastest", so reconnecting is the way to get another server
++    function proton() {
++        if (which === "proton") run("off", "protonvpn disconnect");
++        else run("proton", "warp-cli --accept-tos disconnect >/dev/null 2>&1; protonvpn connect");
++    }
++    function reroll() { if (which === "proton") run("proton", "protonvpn disconnect >/dev/null 2>&1; protonvpn connect"); }
++    property string last: Theme.state.vpnLast || "warp" // ring tap brings back the last one used
++    onWhichChanged: if (which) Theme.state.vpnLast = which
+     function flip() {
+-        if (!verge) return Quickshell.execDetached(["clash-verge"]); // спит — разбудить
+-        if (connected) {
+-            kept = [sys && "System Proxy", tun && "TUN Mode"].filter(Boolean);
+-            kept.forEach(l => press(l));
+-            want = 0;
+-        } else {
+-            (kept.length ? kept : ["System Proxy", "TUN Mode"]).forEach(l => press(l));
+-            want = 1;
+-        }
+-        wantT.restart();
++        if (live) run("off", which === "warp" ? "warp-cli --accept-tos disconnect" : "protonvpn disconnect");
++        else last === "proton" ? proton() : warp();
+     }
+-    // ponytail: «с какого времени» — с включения при живом шелле; туннель, поднятый до старта, считается со старта
++    function setMode(i) {
++        if (i === mode || act.running) return;
++        mode = i;
++        Quickshell.execDetached(["warp-cli", "--accept-tos", "mode", modeNames[i]]);
++        traceT.restart();
++    }
++
++    // ponytail: "since" counts from when the shell saw it come up; a tunnel up before the shell started counts from start
+     property date since: new Date()
+-    onConnectedChanged: if (connected) since = new Date()
++    onLiveChanged: { if (live) since = new Date(); refresh(); }
+ 
+-    // публичная сеть со страницей входа: туннель её не пропустит (dns-hijack, MATCH,PROXY) — выключаем и открываем портал;
+-    // сеть пустила (Full) — включаем обратно. NM проверяет связь мимо туннеля (привязан к wlan0), так что Portal он видит честно
+-    property bool portal: false
++    // ---- details: exit through Cloudflare's trace (works for both), WARP's tunnel stats, Proton's status ----
++    property var exit: ({})   // { ip, loc, colo, warp }
++    property var link: ({})   // warp: { proto, colo, ms, loss }; proton: { server, place, load, proto }
++    Process {
++        id: trace
++        command: ["curl", "-s", "--max-time", "5", "https://www.cloudflare.com/cdn-cgi/trace"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const o = {};
++                text.split("\n").forEach(l => { const i = l.indexOf("="); if (i > 0) o[l.slice(0, i)] = l.slice(i + 1); });
++                root.exit = o;
++            }
++        }
++    }
++    // the route settles a moment after connect: look again
++    Timer { id: traceT; interval: 1500; onTriggered: trace.running = true }
++    Process {
++        id: detail
++        command: ["sh", "-c", root.which === "proton" ? "protonvpn status"
++                            : "warp-cli --accept-tos -j status; printf '\\036'; warp-cli --accept-tos -j tunnel stats; printf '\\036'; warp-cli --accept-tos -j settings"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                if (root.which === "proton") {
++                    const f = k => new RegExp(`^${k}: *(.*)$`, "m").exec(text)?.[1]?.trim() ?? "";
++                    const sv = /^(\S+) in (.*)$/.exec(f("Server"));
++                    root.link = { server: sv?.[1] ?? "", place: sv?.[2] ?? "", load: parseInt(f("Load")) || 0, proto: f("Protocol") };
++                    return;
++                }
++                const [st, ts, se] = text.split("\x1e").map(p => { try { return JSON.parse(p); } catch (e) { return null; } });
++                root.warpState = st?.status ?? "";
++                const m = root.modeNames.indexOf(se?.settings?.operation_mode ?? "");
++                if (m >= 0 && !act.running) root.mode = m;
++                root.link = ts?.warp_is_on ? {
++                    proto: (ts.protocol ?? "").replace(/ *\(.*\)/, "").toLowerCase(), colo: ts.edge?.colo ?? "",
++                    ms: ts.estimated_latency_ms ?? 0, loss: ts.estimated_loss ?? 0
++                } : {};
++            }
++        }
++    }
++    function refresh() {
++        if (!visible) return;
++        if (!live) link = {};
++        detail.running = true; // warp-cli also tells the mode while off
++        traceT.restart();
++    }
++    Timer { running: root.visible && !act.running; interval: 3000; repeat: true; onTriggered: if (!detail.running) detail.running = true }
++
++    // captive portal: the tunnel won't let the login page through — take it down and open the portal;
++    // once the network is Full, bring the same one back. NM checks connectivity on wlan0, past the tunnel
++    property string portal: ""
+     Connections {
+         target: Networking
+         function onConnectivityChanged() {
+             if (Networking.connectivity === NetworkConnectivity.Portal && !root.portal) {
+-                root.portal = root.connected;
+-                if (root.connected) {
++                root.portal = root.which || "-";
++                if (root.live) {
+                     root.flip();
+-                    Quickshell.execDetached(["notify-send", "-a", "vpn", "Portal", "туннель снят до входа в сеть"]);
++                    Quickshell.execDetached(["notify-send", "-a", "vpn", "Portal", `${root.which} is off until you sign in`]);
+                 }
+-                gate.restart(); // браузер — когда verge уже снял system proxy
++                gate.restart();
+             } else if (Networking.connectivity === NetworkConnectivity.Full && root.portal) {
+-                root.portal = false;
+-                if (!root.connected) root.flip();
++                const p = root.portal;
++                root.portal = "";
++                if (p === "warp") root.warp();
++                else if (p === "proton") root.proton();
+             }
+         }
+     }
+     Timer { id: gate; interval: 1500; onTriggered: Qt.openUrlExternally("http://neverssl.com") }
+-    // после входа NM перепроверяет связь с растущим шагом до 5 минут — торопим сами
+-    Timer { running: root.portal; interval: 5000; repeat: true; onTriggered: Networking.checkConnectivity() }
++    Timer { running: !!root.portal; interval: 5000; repeat: true; onTriggered: Networking.checkConnectivity() }
+ 
+-    // ---- verge: профиль (имя, откуда, когда обновлён, сколько потрачено) ----
+-    readonly property string home: (Quickshell.env("XDG_DATA_HOME") || Quickshell.env("HOME") + "/.local/share") + "/io.github.clash-verge-rev.clash-verge-rev"
+-    property var prof: ({})
+-    FileView {
+-        path: root.home + "/profiles.yaml"
+-        watchChanges: true
+-        printErrors: false
+-        onFileChanged: reload()
+-        onLoaded: root.prof = root.parseProf(text())
+-    }
+-    // ponytail: yaml читаем регэкспами — profiles.yaml пишет verge, формат у него плоский
+-    function parseProf(t) {
+-        const cur = /^current: *(\S+)/m.exec(t)?.[1], b = t.split(/\n- /).find(s => s.startsWith(`uid: ${cur}`)) ?? "";
+-        const f = k => new RegExp(`^ +${k}: *(.*)$`, "m").exec(b)?.[1]?.trim() ?? "";
+-        return { name: f("name"), host: /\/\/([^/:]+)/.exec(f("url"))?.[1] ?? "local", updated: +f("updated"), spent: +f("upload") + +f("download"), total: +f("total") };
+-    }
+-    function bytes(n) {
+-        const u = ["b", "kb", "mb", "gb", "tb", "pb"];
+-        let i = 0;
+-        while (n >= 1024 && i < 5) { n /= 1024; i++; }
+-        return `${n.toFixed(i > 2 ? 2 : 0)} ${u[i]}`;
+-    }
+-
+-    // ---- verge: ядро. Сокет сервиса verge или его собственный, секрет — из конфига verge; $0 — путь API ----
+-    readonly property string core: `d='${home}'; s=/run/clash-verge-service/users/$(id -u)/verge-mihomo.sock; [ -S "$s" ] || s="$d/verge-mihomo.sock"; `
+-        + `exec curl -sfN --unix-socket "$s" -H "Authorization: Bearer $(sed -n 's/^secret: *//p' "$d/config.yaml")" "http://core$0"`
+-
+-    // скорость раз в секунду, последние 10 минут — копится всегда, чтобы график не начинался с нуля
++    // ---- speed once a second from the tunnel's counters, last 10 minutes; kept while a tunnel is up so the graph
++    // doesn't start at zero. Down and closed — nothing runs ----
++    FileView { id: rxF; path: root.iface ? `/sys/class/net/${root.iface}/statistics/rx_bytes` : ""; blockAllReads: true; printErrors: false }
++    FileView { id: txF; path: root.iface ? `/sys/class/net/${root.iface}/statistics/tx_bytes` : ""; blockAllReads: true; printErrors: false }
+     property var toll: []
+     property real up: 0
+     property real down: 0
+-    Process {
+-        id: traffic
+-        running: true
+-        command: ["sh", "-c", root.core, "/traffic"]
+-        stdout: SplitParser {
+-            onRead: l => {
+-                try {
+-                    const j = JSON.parse(l);
+-                    root.up = j.up;
+-                    root.down = j.down;
+-                    root.toll = root.toll.slice(-599).concat([[j.up, j.down]]);
+-                } catch (e) {}
+-            }
+-        }
+-        onExited: retry.start() // verge спит — постучимся позже
+-    }
+-    Timer { id: retry; interval: 5000; onTriggered: traffic.running = true }
+-
+-    property int links: 0
+-    Process {
+-        id: conns
+-        command: ["sh", "-c", root.core, "/connections"]
+-        stdout: StdioCollector { onStreamFinished: { try { root.links = JSON.parse(text).connections?.length ?? 0; } catch (e) {} } }
+-    }
+-    Timer { running: root.visible; interval: 2000; repeat: true; triggeredOnStart: true; onTriggered: conns.running = true }
+-
+-    // протокол узлов (vless · xudp) — только у ядра, в трее его нет
+-    property var kinds: ({})
+-    Process {
+-        id: kindsP
+-        command: ["sh", "-c", root.core, "/proxies"]
+-        stdout: StdioCollector {
+-            onStreamFinished: {
+-                try {
+-                    const p = JSON.parse(text).proxies, k = {};
+-                    for (const n in p) k[n] = [p[n].type.toLowerCase(), p[n].xudp && "xudp"].filter(Boolean);
+-                    root.kinds = k;
+-                } catch (e) {}
+-            }
++    property var prev: null // [rx, tx, iface]
++    Timer {
++        running: root.live || root.visible
++        interval: 1000
++        repeat: true
++        onTriggered: {
++            let d = 0, u = 0;
++            if (root.iface) {
++                rxF.reload(); txF.reload();
++                const rx = parseFloat(rxF.text()) || 0, tx = parseFloat(txF.text()) || 0;
++                if (root.prev && root.prev[2] === root.iface) { d = Math.max(0, rx - root.prev[0]); u = Math.max(0, tx - root.prev[1]); }
++                root.prev = [rx, tx, root.iface];
++            } else root.prev = null;
++            root.down = d;
++            root.up = u;
++            root.toll = root.toll.slice(-599).concat([[u, d]]);
+         }
+     }
+ 
+-    // матрица трафика: 50 столбцов по 12 с, точек от оси: [вход вверх, выход вниз], 0…5 по общему максимуму.
+-    // Панель закрыта — не считаем: копится каждую секунду, а матрицу никто не видит
++    // traffic matrix: 50 columns of 12 s, dots from the axis: [in up, out down], 0…5 against the common max.
++    // Closed — not counted: it piles up every second, but nobody sees the matrix
+     readonly property var cols: {
+         if (!root.visible) return [];
+         const s = Array(Math.max(0, 600 - toll.length)).fill([0, 0]).concat(toll), c = [];
+@@ -208,21 +179,34 @@ PanelWindow {
+     }
+     function speed(b) { const k = b / 1024; return k >= 1000 ? [(k / 1024).toFixed(1), "mb/s"] : [k.toFixed(1), "kb/s"]; }
+ 
+-    // ---- открытие / закрытие: сам себе анимация (у слоёв glyph в hypr no_anim) ----
+-    property int cur: 0 // курсор клавиатуры по узлам
++    // rows on the right: what the tunnel looks like from outside
++    readonly property var facts: {
++        const e = exit, l = link, w = which;
++        const ip = e.ip ? (e.ip.length > 22 ? e.ip.slice(0, 21) + "…" : e.ip) : "—";
++        if (w === "proton") return [
++            ["exit ip", ip], ["where", l.place || "—"], ["server", l.server || "—"],
++            ["via", l.proto || "—"], ["plan", "free · fastest only"]
++        ];
++        if (w === "warp") return [
++            ["exit ip", ip], ["where", `${e.loc ?? "—"} · edge ${l.colo || e.colo || "—"}`], ["server", "cloudflare"],
++            ["via", [l.proto, modeNames[mode]].filter(Boolean).join(" · ") || "—"], ["warp", e.warp ?? "—"]
++        ];
++        return [["exit ip", ip], ["where", `${e.loc ?? "—"} · direct`], ["server", "—"], ["via", "your isp"], ["warp", e.warp ?? "—"]];
++    }
++
++    // ---- open / close: its own animation (glyph layers have no_anim in hypr) ----
+     property bool shown: false
+     property real t: shown ? 1 : 0
+     Behavior on t { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+ 
+     function open() {
+-        cur = Math.max(0, ways.findIndex(w => w.on));
+-        kindsP.running = true;
+         shown = true;
+         panel.forceActiveFocus();
++        detail.running = true;
++        trace.running = true;
+     }
+     function close() { shown = false; }
+     function toggle() { shown ? close() : open(); }
+-    onVisibleChanged: if (visible) list.positionViewAtIndex(cur, ListView.Contain)
+ 
+     visible: t > 0
+     anchors { left: true; right: true; top: true; bottom: true }
+@@ -253,30 +237,28 @@ PanelWindow {
+             color: Theme.s1
+             border { width: 1; color: Theme.s2 }
+             focus: true
+-            MouseArea { anchors.fill: parent } // клик по панели не закрывает
++            MouseArea { anchors.fill: parent } // a click on the panel doesn't close it
+ 
+             Keys.onPressed: e => {
+-                const n = root.ways.length;
+-                if ((e.key === Qt.Key_Up || e.key === Qt.Key_K) && n) root.cur = (root.cur + n - 1) % n;
+-                else if ((e.key === Qt.Key_Down || e.key === Qt.Key_J) && n) root.cur = (root.cur + 1) % n;
+-                else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) root.go(root.cur);
+-                else if (e.key === Qt.Key_S) root.flip();
+-                else if (e.key === Qt.Key_T) root.ping();
+-                else if (e.key === Qt.Key_Tab) root.route((root.mode + 1) % 3);
++                if (e.key === Qt.Key_S || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) root.flip();
++                else if (e.key === Qt.Key_W) root.warp();
++                else if (e.key === Qt.Key_P) root.proton();
++                else if (e.key === Qt.Key_N) root.reroll();
++                else if (e.key === Qt.Key_Tab) root.setMode((Math.max(0, root.mode) + 1) % 3);
++                else if (e.key === Qt.Key_R) trace.running = true;
+                 else if (e.key === Qt.Key_Escape) root.close();
+                 else return;
+-                list.positionViewAtIndex(root.cur, ListView.Contain);
+                 e.accepted = true;
+             }
+ 
+-            // ---- слева: кольцо, пилюли, режим, профиль ----
++            // ---- left: ring, pills, mode, link ----
+             Column {
+                 x: 36
+                 y: 36
+                 width: 340
+                 spacing: 16
+ 
+-                // кольцо: загорается волной на открытии и при включении; клик — вкл/выкл
++                // ring: lights up in a wave on open and on connect; tap — on/off
+                 Item {
+                     width: 340
+                     height: 340
+@@ -295,14 +277,16 @@ PanelWindow {
+                             anchors.horizontalCenter: parent.horizontalCenter
+                             topPadding: lead + 22
+                             bottomPadding: lead + 16
+-                            text: root.connected ? "ON" : "OFF"
++                            text: root.busy && root.busy !== "off" && !root.live ? "···" : root.connected ? "ON" : "OFF"
+                             font.pixelSize: 120
+                             color: root.connected ? Theme.fg : Theme.mute
+                             Behavior on color { ColorAnimation { duration: Theme.t } }
+                         }
+                         Lb {
+                             anchors.horizontalCenter: parent.horizontalCenter
+-                            text: !root.verge ? "verge sleeps · tap" : root.connected ? `since ${Qt.formatTime(root.since, "hh:mm")}` : "tap to connect"
++                            text: root.busy === "off" ? "disconnecting" : root.busy && !root.live ? `${root.busy} · connecting`
++                                : root.busy ? `${root.busy} · switching` : root.live ? `${root.which} · since ${Qt.formatTime(root.since, "hh:mm")}`
++                                : `tap · ${root.last}`
+                         }
+                     }
+                     TapHandler { onTapped: root.flip() }
+@@ -311,17 +295,30 @@ PanelWindow {
+ 
+                 Row {
+                     spacing: 12
+-                    Pill { on: root.sys; icon: "\u{F059F}"; name: "System"; sub: "proxy"; onClicked: root.press("System Proxy") }
+-                    Pill { on: root.tun; icon: "\u{F0A60}"; name: "TUN"; sub: "tunnel"; onClicked: root.press("TUN Mode") }
++                    Pill {
++                        on: root.which === "warp"
++                        icon: "\u{F015F}"
++                        name: "WARP"
++                        sub: root.busy === "warp" ? "connecting" : on ? (root.warpState || "on").toLowerCase() : "off"
++                        onClicked: root.warp()
++                    }
++                    Pill {
++                        on: root.which === "proton"
++                        icon: "\u{F099D}"
++                        name: "Proton"
++                        sub: root.busy === "proton" ? "connecting" : on ? root.link.server || "on" : "off"
++                        onClicked: root.proton()
++                    }
+                 }
+ 
+-                // режим: белая заливка перетекает к выбранному чипу
++                // WARP mode: the white fill flows to the picked chip; dimmed while Proton is the tunnel
+                 Rectangle {
+                     id: modeBox
+                     width: 340
+                     height: 58
+                     radius: 29
+                     color: Theme.s2
++                    opacity: root.which === "proton" ? 0.4 : 1
+                     readonly property real cw: (width - 12) / 3
+                     Rectangle {
+                         x: 6 + Math.max(0, root.mode) * modeBox.cw
+@@ -337,167 +334,129 @@ PanelWindow {
+                         x: 6
+                         y: 6
+                         Repeater {
+-                            model: root.modeNames
++                            model: root.modeLabels
+                             Item {
+                                 required property string modelData
+                                 required property int index
+                                 width: modeBox.cw
+                                 height: 46
+                                 Lb { anchors.centerIn: parent; text: parent.modelData; px: 11; color: root.mode === parent.index ? Theme.ink : Theme.grey }
+-                                TapHandler { onTapped: root.route(parent.index) }
++                                TapHandler { onTapped: root.setMode(parent.index) }
+                             }
+                         }
+                     }
+                 }
+             }
+ 
++            // link quality: WARP — latency and loss to the edge; Proton — server load
+             Column {
+                 x: 36
+                 anchors { bottom: parent.bottom; bottomMargin: 36 }
+                 width: 340
+                 spacing: 6
+-                Lb { text: "profile"; px: 11 }
+-                Lb { width: parent.width; elide: Text.ElideRight; text: root.prof.name || "none"; px: 14; color: Theme.fg }
+-                Lb { text: `${root.prof.host ?? "local"}${root.prof.updated ? " · upd " + Qt.locale("en_US").toString(new Date(root.prof.updated * 1000), "d MMM") : ""}`; px: 11 }
++                Lb { text: root.which === "proton" ? "server load" : "link"; px: 11 }
++                Lb {
++                    width: parent.width
++                    elide: Text.ElideRight
++                    px: 14
++                    color: Theme.fg
++                    text: root.which === "proton" ? `${root.link.load ?? 0}%`
++                        : root.link.ms !== undefined ? `${root.link.ms} ms · ${((root.link.loss ?? 0) * 100).toFixed(1)}% loss` : "no tunnel"
++                }
+                 Item { width: 1; height: 6 }
+-                Seg { visible: (root.prof.total ?? 0) > 0; width: parent.width; height: 6; n: 24; f: (root.prof.spent ?? 0) / (root.prof.total || 1) }
+-                Lb { text: `${root.bytes(root.prof.spent ?? 0)} of ${root.prof.total ? root.bytes(root.prof.total) : "∞"} spent`; px: 11 }
++                Seg {
++                    visible: root.live
++                    width: parent.width
++                    height: 6
++                    n: 24
++                    // fuller is better for latency, worse for load
++                    f: root.which === "proton" ? (root.link.load ?? 0) / 100 : root.link.ms ? Math.max(0.05, 1 - root.link.ms / 300) : 0
++                }
++                Lb { visible: root.live; text: root.which === "proton" ? "n · new server" : "edge latency"; px: 11 }
+             }
+ 
+-            // ---- справа: скорость, трафик, узлы ----
+-            Item {
++            // ---- right: speed, traffic, exit ----
++            Column {
+                 x: 420
+                 y: 36
+                 width: parent.width - x - 36
+-                height: parent.height - 72
++                spacing: 12
+ 
+-                Column {
+-                    id: rcol
+-                    width: parent.width
+-                    spacing: 12
+-
+-                    Row {
+-                        spacing: 56
+-                        Stat { k: `↓ in · ${root.speed(root.down)[1]}`; v: root.speed(root.down)[0] }
+-                        Stat { k: `↑ out · ${root.speed(root.up)[1]}`; v: root.speed(root.up)[0] }
+-                    }
+-                    Item { width: 1; height: 14 }
++                Row {
++                    spacing: 56
++                    Stat { k: `↓ in · ${root.speed(root.down)[1]}`; v: root.speed(root.down)[0] }
++                    Stat { k: `↑ out · ${root.speed(root.up)[1]}`; v: root.speed(root.up)[0] }
++                }
++                Item { width: 1; height: 14 }
+ 
+-                    Item {
+-                        width: parent.width
+-                        height: tl.height
+-                        Lb { id: tl; text: "traffic · in / out · 10 min" }
+-                        Lb { anchors.right: parent.right; text: `${root.links} connections`; color: Theme.fg }
+-                    }
+-                    // матрица: вход растёт от середины вверх, выход — вниз; верхушка белая, под ней серые
+-                    Grid {
+-                        id: mx
+-                        width: parent.width
+-                        columns: 50
+-                        spacing: 4
+-                        readonly property real d: (width - 49 * spacing) / 50
+-                        Repeater {
+-                            model: 50 * 10
+-                            Rectangle {
+-                                required property int index
+-                                readonly property int r: Math.floor(index / 50)
+-                                readonly property int lv: r < 5 ? 5 - r : r - 4 // от оси: 1 … 5
+-                                readonly property int h: root.cols[index % 50]?.[r < 5 ? 0 : 1] ?? 0
+-                                width: mx.d
+-                                height: mx.d
+-                                radius: mx.d / 2
+-                                color: lv === h ? Theme.fg : lv < h ? Theme.grey : Theme.s2
+-                            }
++                Item {
++                    width: parent.width
++                    height: tl.height
++                    Lb { id: tl; text: "traffic · in / out · 10 min" }
++                    Lb { anchors.right: parent.right; text: root.iface || "no tunnel"; color: Theme.fg }
++                }
++                // matrix: in grows up from the middle, out grows down; the tip is white, grey under it
++                Grid {
++                    id: mx
++                    width: parent.width
++                    columns: 50
++                    spacing: 4
++                    readonly property real d: (width - 49 * spacing) / 50
++                    Repeater {
++                        model: 50 * 10
++                        Rectangle {
++                            required property int index
++                            readonly property int r: Math.floor(index / 50)
++                            readonly property int lv: r < 5 ? 5 - r : r - 4 // from the axis: 1 … 5
++                            readonly property int h: root.cols[index % 50]?.[r < 5 ? 0 : 1] ?? 0
++                            width: mx.d
++                            height: mx.d
++                            radius: mx.d / 2
++                            color: lv === h ? Theme.fg : lv < h ? Theme.grey : Theme.s2
+                         }
+                     }
+-                    Item { width: 1; height: 14 }
++                }
++                Item { width: 1; height: 14 }
+ 
+-                    Item {
+-                        width: parent.width
+-                        height: nl.height
+-                        Lb { id: nl; text: `nodes · ${root.group}` }
+-                        Lb {
+-                            anchors.right: parent.right
+-                            text: root.pinging ? "testing ···" : "test latency"
+-                            color: root.pinging ? Theme.grey : Theme.fg
+-                            TapHandler { onTapped: root.ping() }
+-                        }
++                Item {
++                    width: parent.width
++                    height: el.height
++                    Lb { id: el; text: "exit" }
++                    Lb {
++                        anchors.right: parent.right
++                        text: trace.running ? "checking ···" : "check again"
++                        color: trace.running ? Theme.grey : Theme.fg
++                        TapHandler { onTapped: trace.running = true }
+                     }
+                 }
+-
+-                // ponytail: не влезли — листаются, панель не растёт
+-                ListView {
+-                    id: list
+-                    anchors { top: rcol.bottom; topMargin: 4; bottom: parent.bottom; left: parent.left; right: parent.right }
+-                    clip: true
+-                    boundsBehavior: Flickable.StopAtBounds
+-                    model: root.ways.length // по числу: делегаты живут, заливка успевает перетечь
+-                    delegate: Rectangle {
+-                        id: row
++                Repeater {
++                    model: root.facts
++                    Rectangle {
++                        required property var modelData
+                         required property int index
+-                        readonly property var w: root.ways[index] ?? {}
+-                        readonly property bool on: !!w.on
+-                        width: list.width
++                        width: parent.width
+                         height: 52
+                         radius: 26
+-                        color: on ? Theme.fg : index === root.cur ? Theme.s2 : Theme.fade(Theme.s2, 0)
++                        color: index === 0 && root.live ? Theme.fg : Theme.s2
+                         Behavior on color { ColorAnimation { duration: Theme.t } }
+-
+-                        Num {
+-                            id: cc
+-                            x: 20
++                        Lb {
++                            x: 24
+                             anchors.verticalCenter: parent.verticalCenter
+-                            width: 50
+-                            text: row.w.cc ?? ""
+-                            font.pixelSize: 26
+-                            color: row.on ? Theme.ink : Theme.fg
++                            text: parent.modelData[0]
++                            px: 11
++                            color: parent.index === 0 && root.live ? Theme.ink : Theme.grey
+                         }
+-                        Column {
+-                            anchors { left: cc.right; leftMargin: 10; right: ping.left; rightMargin: 16; verticalCenter: parent.verticalCenter }
+-                            Text {
+-                                width: parent.width
+-                                elide: Text.ElideRight
+-                                text: row.w.name ?? ""
+-                                font { family: Theme.ui; pixelSize: 16; weight: Font.DemiBold }
+-                                color: row.on ? Theme.ink : Theme.fg
+-                            }
+-                            Lb {
+-                                width: parent.width
+-                                visible: !!row.w.sub
+-                                elide: Text.ElideRight
+-                                text: row.w.sub ?? ""
+-                                px: 10
+-                                color: row.on ? Theme.ink : Theme.grey
+-                                opacity: row.on ? 0.6 : 1
+-                            }
+-                        }
+-                        // пинг: 5 сегментов, меньше — хуже; встроенные (direct/reject) без пинга
+-                        Row {
+-                            id: ping
+-                            anchors { right: parent.right; rightMargin: 20; verticalCenter: parent.verticalCenter }
+-                            spacing: 12
+-                            Seg {
+-                                anchors.verticalCenter: parent.verticalCenter
+-                                width: 54
+-                                height: 6
+-                                n: 5
+-                                f: row.w.ms > 0 ? Math.max(0.2, 1 - row.w.ms / 500) : 0
+-                                on: row.on ? Theme.ink : Theme.fg
+-                                off: row.on ? Theme.fade(Theme.ink, 0.2) : Theme.s3
+-                            }
+-                            Lb {
+-                                anchors.verticalCenter: parent.verticalCenter
+-                                width: 64
+-                                horizontalAlignment: Text.AlignRight
+-                                text: root.pinging && row.w.ms !== 0 ? "···" : row.w.ms ? `${row.w.ms} ms` : "—"
+-                                px: 11
+-                                color: row.on ? Theme.ink : Theme.grey
+-                            }
++                        Text {
++                            anchors { right: parent.right; rightMargin: 24; verticalCenter: parent.verticalCenter }
++                            width: parent.width - 160
++                            horizontalAlignment: Text.AlignRight
++                            elide: Text.ElideRight
++                            text: parent.modelData[1]
++                            font { family: Theme.ui; pixelSize: 16; weight: Font.DemiBold }
++                            color: parent.index === 0 && root.live ? Theme.ink : Theme.fg
+                         }
+-                        TapHandler { onTapped: { root.cur = row.index; root.go(row.index); } }
+                     }
+                 }
+-                Lb { visible: !root.ways.length; anchors.centerIn: list; text: root.verge ? "no nodes" : "clash verge sleeps" }
+             }
+         }
+ 
+@@ -507,13 +466,13 @@ PanelWindow {
+             opacity: root.t
+             spacing: 34
+             Repeater {
+-                model: ["↑↓ node", "↵ connect", "s tunnel", "t ping", "tab route", "esc close"]
++                model: ["s on/off", "w warp", "p proton", "n new server", "tab mode", "r check ip", "esc close"]
+                 Lb { required property string modelData; text: modelData }
+             }
+         }
+     }
+ 
+-    // пилюля: вкл — белая, текст чёрный (как в быстрых настройках)
++    // pill: on — white, black text (as in quick settings)
+     component Pill: Rectangle {
+         id: pill
+         property bool on
+@@ -550,7 +509,7 @@ PanelWindow {
+         }
+         TapHandler { onTapped: pill.clicked() }
+     }
+-    // скорость: метка и число Doto
++    // speed: label and a Doto number
+     component Stat: Column {
+         property string k
+         property string v
+-- 
+2.55.0
+

@@ -1,0 +1,70 @@
+From c88097566e02766227d57c44af3ebe73268467be Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 14:38:38 +0530
+Subject: [PATCH 12/24] noah: Quick's vpn tile drives Cloudflare WARP
+ (warp-cli) instead of Clash Verge; state polled with rec/air
+
+---
+ config/quickshell/glyph/Sys.qml | 33 +++++++--------------------------
+ 1 file changed, 7 insertions(+), 26 deletions(-)
+
+diff --git a/config/quickshell/glyph/Sys.qml b/config/quickshell/glyph/Sys.qml
+index 5fee9a4..4508ac0 100644
+--- a/config/quickshell/glyph/Sys.qml
++++ b/config/quickshell/glyph/Sys.qml
+@@ -60,14 +60,18 @@ Singleton {
+     property bool rec: false
+     readonly property bool night: Rules.store.night
+     property bool air: false
++    // noah: WARP for the vpn tile, polled too since warp-cli or end4's sidebar can flip it
++    property bool vpn: false
+     Process {
+         id: poll
+         command: ["sh", "-c", "pgrep -f '^gpu-screen-recorder' >/dev/null && echo rec; "
+-                            + "rfkill -rno SOFT | grep -qv '^blocked' || echo air"]
++                            + "rfkill -rno SOFT | grep -qv '^blocked' || echo air; "
++                            + "warp-cli --accept-tos status 2>/dev/null | grep -q 'Status update: Connected' && echo warp"]
+         stdout: StdioCollector {
+             onStreamFinished: {
+                 root.rec = text.includes("rec");
+                 root.air = text.includes("air");
++                root.vpn = text.includes("warp");
+             }
+         }
+     }
+@@ -128,30 +132,7 @@ Singleton {
+         }
+     }
+ 
+-    // ---- vpn: clash verge через пункты его трея, как договор в demonshot.
+-    // ponytail: подписи английские (language: en в verge); другой язык — поменять строки ----
++    // ---- vpn: noah: the Quick tile drives Cloudflare WARP (state in the poll above); verge stays for the vpn/ panel (Super+P) ----
+     readonly property var verge: SystemTray.items.values.find(i => i.title === "clash-verge" || i.id.includes("clash-verge")) ?? null
+-    QsMenuOpener { id: vmenu; menu: root.verge?.menu ?? null }
+-    readonly property var vpnItems: ["System Proxy", "TUN Mode"]
+-    function vpnItem(l) { return vmenu.children.values.find(e => e.text.startsWith(l)) ?? null; }
+-    readonly property bool vpn: vpnItems.some(l => vpnItem(l)?.checkState === Qt.Checked)
+-    property var queue: []
+-    function toggleVpn() {
+-        if (!verge) return Quickshell.execDetached(["clash-verge"]); // спит — разбудить
+-        queue = vpn ? vpnItems.filter(l => vpnItem(l)?.checkState === Qt.Checked) : vpnItems;
+-        presser.start();
+-    }
+-    // verge пересобирает меню после каждого нажатия — по одному
+-    Timer {
+-        id: presser
+-        interval: 350
+-        repeat: true
+-        triggeredOnStart: true
+-        onTriggered: {
+-            const [l, ...rest] = root.queue;
+-            root.queue = rest;
+-            if (l) root.vpnItem(l)?.triggered();
+-            if (!rest.length) stop();
+-        }
+-    }
++    function toggleVpn() { Quickshell.execDetached(["warp-cli", "--accept-tos", vpn ? "disconnect" : "connect"]); vpn = !vpn; }
+ }
+-- 
+2.55.0
+

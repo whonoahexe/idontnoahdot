@@ -2,18 +2,28 @@
 
 Personal dotfiles for my [illogical-impulse](https://github.com/end-4/dots-hyprland) Hyprland rice, curated for easy restore on a fresh install. Colors throughout (Hyprland, GTK, Qt/Kvantum, terminal, lock screen, boot splash) are generated dynamically from the current wallpaper via [matugen](https://github.com/InioX/matugen) (Material You).
 
-## What's here
+## Two rices, kept apart
+
+| | Where | What |
+|---|---|---|
+| **end4** (default) | repo root | my [illogical-impulse](https://github.com/end-4/dots-hyprland) rice: everything listed below |
+| **Glyph** | [`glyph/`](glyph/) | a Nothing OS–style rice on [Nebelung-cloud/glyph-rice](https://github.com/Nebelung-cloud/glyph-rice) with my changes as patches, plus the Spotify / Brave / Apostrophe themes made to match it. Self-contained: its own [README](glyph/README.md) and `install.sh` |
+| shared | repo root | packages, `/etc` tweaks, helper scripts, wallpapers, and `rice-switch` (`.local/bin`), which flips between the two (`rice-switch glyph` / `rice-switch end4`, then log out and in) |
+
+Nothing Glyph-only lives at the root, and `glyph/` holds nothing of end4's.
+
+## What's here (end4 + shared)
 
 - `.config/hypr` — Hyprland, hypridle, hyprlock
 - `.config/matugen` — matugen config + templates that regenerate colors across every app below when the wallpaper changes
 - `.config/illogical-impulse/config.json` + `presets/` — shell appearance/bar/lock settings (weather city redacted)
-- `quickshell/` — the shell itself: [pctrade/end4-pC](https://github.com/pctrade/end4-pC) pinned to the commit in `end4-pC.base`, with my changes in `end4-pC.patch` (extra quick toggles: Left Shift, Full charge, Movie mode, Cloudflare WARP, Proton VPN; Claude usage bar widget; lock/notification/media fixes; wallpaper scene loader)
+- `quickshell/` — the shell itself: [pctrade/end4-pC](https://github.com/pctrade/end4-pC) pinned to the commit in `end4-pC.base`, with my changes in `end4-pC.patch` (extra quick toggles: Movie mode, Animated wallpaper, a fixed Cloudflare WARP; notification/lock/media fixes; GPU tab in the resources overlay; Restart to Windows; animated wallpaper scenes that pause on battery and behind windows)
 - Terminal/shell: `kitty`, `foot`, `ghostty`, `fish`, `zshrc.d`, `starship.toml`, `.bashrc`, `.bash_profile`
 - Theming: `gtk-3.0`, `gtk-4.0`, `Kvantum`, `kde-material-you-colors`, `darklyrc`, `fontconfig`, `xsettingsd`, `.gtkrc-2.0`
-- Misc: `fuzzel` (launcher), `wlogout`, `cava`, `mpv`, `yazi`, `mimeapps.list`, `QtProject.conf`, `Trolltech.conf`, `xdg-desktop-portal`
-- `.local/bin` + `.config/systemd/user` — helper scripts and their user units: `audio-watchdog` (restarts a hung PipeWire), `suspend-unless-docked`, `gamemode-hook.sh`, `mouse-rgb-watch` (re-applies the mouse color on replug), `claude-usage`, `strata-patched-update`, and the `gh` / `git-credential-gh-account` wrappers for per-folder GitHub accounts
+- Misc: `fuzzel` (launcher), `wlogout`, `cava`, `mpv`, `mimeapps.list`, `QtProject.conf`, `Trolltech.conf`, `xdg-desktop-portal`
+- `.local/bin` + `.config/systemd/user` — helper scripts and their user units: `audio-watchdog` (restarts a hung PipeWire), `suspend-unless-docked`, `gamemode-hook.sh`, `mouse-rgb-watch` (re-applies the mouse color on replug), `strata-patched-update`, and the `gh` / `git-credential-gh-account` wrappers for per-folder GitHub accounts
 - `Pictures/Wallpapers` (current wallpaper + its animated scene) and `.local/state/quickshell/user/generated` (its generated colors, so the first login already looks right)
-- `.config/xkb` (no-left-shift keymap for the sidebar toggle), `MangoHud`, `brave-flags.conf`, `strata` (file manager settings + custom actions)
+- `MangoHud`, `brave-flags.conf`, `strata` (file manager settings + custom actions)
 - `plymouth/illogical-impulse` — custom boot splash theme matched to the matugen palette (not part of upstream dots-hyprland, built separately)
 
 Not included on purpose: anything with credentials/session state (SSH, GPG, browser profiles, `gh`/`npm`/`tailscale` config, KDE wallet, Strata's SSH hosts, etc.), work tooling, video wallpapers, and KDE Plasma session leftovers unrelated to the Hyprland setup.
@@ -21,7 +31,7 @@ Not included on purpose: anything with credentials/session state (SSH, GPG, brow
 ## Updating this repo
 
 ```sh
-./sync.sh      # copies the live configs from $HOME in, redacts, regenerates the end4-pC patch
+./sync.sh      # copies the live configs from $HOME in, redacts, regenerates the end4-pC patch and glyph/
 git diff       # review, then commit and push
 ```
 
@@ -43,8 +53,9 @@ Enter your password once, then reboot when it says done and pick Hyprland (not t
 4. installs my packages from `packages/` (`hardware.txt`, the NVIDIA + ASUS bits, only on the same laptop model, an ASUS TUF A15 FA506QM)
 5. installs the `/etc` tweaks from `system/` (gamemode, zram + sysctl, no auto-sleep on lid close, v4l2loopback; Wi-Fi ASPM fix and NVIDIA power limit on the same model) and enables the services in `system/services.txt`
 6. runs `install.sh` (below)
-7. builds [Strata](https://github.com/lgse/strata) from the latest release with my patches in `strata/`
-8. installs Claude Code
+7. runs `glyph/install.sh`: Glyph next to end4, end4 stays active ([details](glyph/README.md))
+8. builds [Strata](https://github.com/lgse/strata) from the latest release with my patches in `strata/`
+9. installs Claude Code
 
 ### Just the dotfiles
 

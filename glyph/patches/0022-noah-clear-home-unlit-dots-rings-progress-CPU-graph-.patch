@@ -1,0 +1,77 @@
+From 081fc519962ab8bc4d04c13d4d271710fa0defcd Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 16:20:15 +0530
+Subject: [PATCH 22/24] =?UTF-8?q?noah:=20clear=20home=20=E2=80=94=20unlit?=
+ =?UTF-8?q?=20dots=20(rings,=20progress,=20CPU=20graph)=20faint=20white=20?=
+ =?UTF-8?q?instead=20of=20dark=20grey,=20which=20read=20as=20holes=20on=20?=
+ =?UTF-8?q?a=20picture?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/home/Home.qml | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/config/quickshell/glyph/home/Home.qml b/config/quickshell/glyph/home/Home.qml
+index d7b94d0..13d8d9b 100644
+--- a/config/quickshell/glyph/home/Home.qml
++++ b/config/quickshell/glyph/home/Home.qml
+@@ -12,6 +12,9 @@ import qs.services
+ // Окно открылось — всё уходит под него само. Опрос системы и анимации — только пока воркспейс пуст
+ PanelWindow {
+     id: root
++    // noah: clear home over a wallpaper — no cards (W/RingW), and unlit dots faint white: dark grey reads as holes on a picture
++    readonly property bool bare: Theme.state.homeUi === 1 && !!Theme.state.wall
++    readonly property color unlit: bare ? Theme.fade(Theme.fg, 0.22) : Theme.s3
+ 
+     anchors { left: true; right: true; top: true; bottom: true }
+     exclusionMode: ExclusionMode.Ignore
+@@ -215,7 +218,7 @@ PanelWindow {
+                         color: Theme.grey
+                     }
+                     Item { width: 1; height: 18 }
+-                    Seg { width: parent.width; height: 6; n: 24; f: root.player?.lengthSupported && root.player.length > 0 ? Media.position / root.player.length : 0 } // firefox длину не шлёт
++                    Seg { off: root.unlit; width: parent.width; height: 6; n: 24; f: root.player?.lengthSupported && root.player.length > 0 ? Media.position / root.player.length : 0 } // firefox длину не шлёт
+                     Item { width: 1; height: 16 }
+                     Controls { size: 22; play: 52 }
+                 }
+@@ -227,7 +230,7 @@ PanelWindow {
+             id: budsW
+             W {
+                 round: true
+-                Ring { anchors { fill: parent; margins: 12 } f: root.buds ? root.buds.battery : Sys.vol }
++                Ring { anchors { fill: parent; margins: 12 } off: root.unlit; f: root.buds ? root.buds.battery : Sys.vol }
+                 Column {
+                     anchors.centerIn: parent
+                     Icon { anchors.horizontalCenter: parent.horizontalCenter; text: root.buds ? "\u{F02CB}" : "\u{F057E}"; font.pixelSize: 30 }
+@@ -296,7 +299,7 @@ PanelWindow {
+                             height: 8
+                             radius: 4
+                             // вне круга — прозрачная, не visible: Grid сдвинул бы остальные
+-                            color: Math.abs(cy) > half ? "transparent" : Math.abs(cy) < v * (half + 1) ? Theme.fg : Theme.s3
++                            color: Math.abs(cy) > half ? "transparent" : Math.abs(cy) < v * (half + 1) ? Theme.fg : root.unlit
+                         }
+                     }
+                 }
+@@ -342,7 +345,7 @@ PanelWindow {
+                                 width: spark.d
+                                 height: spark.d
+                                 radius: spark.d / 2
+-                                color: up === h ? Theme.fg : up < h ? Theme.grey : Theme.s2
++                                color: up === h ? Theme.fg : up < h ? Theme.grey : root.bare ? Theme.fade(Theme.fg, 0.14) : Theme.s2
+                             }
+                         }
+                     }
+@@ -375,7 +378,7 @@ PanelWindow {
+         readonly property bool bare: Theme.state.homeUi === 1 && !!Theme.state.wall // noah: as W
+         color: bare ? "transparent" : Theme.s1
+         border { width: bare ? 0 : 1; color: Theme.s2 }
+-        Ring { anchors { fill: parent; margins: 12 } f: rw.f; on: rw.on }
++        Ring { anchors { fill: parent; margins: 12 } f: rw.f; on: rw.on; off: rw.bare ? Theme.fade(Theme.fg, 0.22) : Theme.s3 }
+         Column {
+             anchors.centerIn: parent
+             Num { anchors.horizontalCenter: parent.horizontalCenter; text: rw.value; font.pixelSize: 72 }
+-- 
+2.55.0
+

@@ -1,0 +1,164 @@
+From 714d95cb6c6494c3d36d718875b13798950268de Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 13:52:34 +0530
+Subject: [PATCH 06/24] Revert "noah: ljs.lol easing (3 Theatre.js curves) for
+ Hyprland and the shell"
+
+This reverts commit a8ba0deae18df4c2e7d5c78b855ced2763a5f213.
+---
+ config/hypr/hyprland/animations.lua          | 11 ++++-------
+ config/quickshell/glyph/Theme.qml            |  8 ++------
+ config/quickshell/glyph/buds/Buds.qml        | 14 +++++++-------
+ config/quickshell/glyph/components/Wall.qml  |  2 +-
+ config/quickshell/glyph/glyph/Glyph.qml      |  4 ++--
+ config/quickshell/glyph/lock/LockSurface.qml |  2 +-
+ config/quickshell/glyph/shot/Shot.qml        |  2 +-
+ 7 files changed, 18 insertions(+), 25 deletions(-)
+
+diff --git a/config/hypr/hyprland/animations.lua b/config/hypr/hyprland/animations.lua
+index 100a9a6..5ca55fe 100644
+--- a/config/hypr/hyprland/animations.lua
++++ b/config/hypr/hyprland/animations.lua
+@@ -5,13 +5,10 @@ hl.config({
+ })
+ 
+ -- Animation curves
+--- noah: curves from ljs.lol (its Theatre.js keyframes), same names so every animation
+--- (and user.lua's window overrides) picks them up. Revert: git revert ljs-easing
+---   was specialWorkSwitch/emphasizedDecel {0.05,0.7},{0.1,1}; emphasizedAccel {0.3,0},{0.8,0.15}; standard {0.2,0},{0,1}
+-hl.curve("specialWorkSwitch", { type = "bezier", points = { { 0.65, 0.04 }, { 0.5, 1 } } })  -- ljs soft landing
+-hl.curve("emphasizedAccel", { type = "bezier", points = { { 0.65, 0.04 }, { 0.35, 1 } } })   -- ljs main (~easeInOutCubic)
+-hl.curve("emphasizedDecel", { type = "bezier", points = { { 0.65, 0.04 }, { 0.35, 1 } } })   -- ljs main (~easeInOutCubic)
+-hl.curve("standard", { type = "bezier", points = { { 0.5, 0 }, { 0.5, 1 } } })               -- ljs symmetric ease-in-out
++hl.curve("specialWorkSwitch", { type = "bezier", points = { { 0.05, 0.7 }, { 0.1, 1 } } })
++hl.curve("emphasizedAccel", { type = "bezier", points = { { 0.3, 0 }, { 0.8, 0.15 } } })
++hl.curve("emphasizedDecel", { type = "bezier", points = { { 0.05, 0.7 }, { 0.1, 1 } } })
++hl.curve("standard", { type = "bezier", points = { { 0.2, 0 }, { 0, 1 } } })
+ 
+ -- Animation configs
+ hl.animation({ leaf = "layersIn", enabled = true, speed = 5, bezier = "emphasizedDecel", style = "slide" })
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index fbfc984..25df55d 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -37,12 +37,8 @@ Singleton {
+         return sc ? Math.min(sc.width / 1920, sc.height / 1080) : 1;
+     }
+ 
+-    // noah: easing from ljs.lol (its Theatre.js keyframes). Revert: git revert ljs-easing
+-    readonly property var ljsInOut: [0.5, 0, 0.5, 1, 1, 1]      // symmetric ease-in-out (Theatre default)
+-    readonly property var ljsCubic: [0.65, 0.04, 0.35, 1, 1, 1] // ~easeInOutCubic, their main curve
+-    readonly property var ljsSoft: [0.65, 0.04, 0.5, 1, 1, 1]   // same start, softer landing
+-    // glide: was ease-out-quart [0.25, 1, 0.5, 1], без перелёта — как bezier glide в hypr
+-    readonly property var glide: ljsCubic
++    // glide: ease-out-quart, без перелёта — как bezier glide в hypr
++    readonly property var glide: [0.25, 1, 0.5, 1, 1, 1]
+     readonly property int t: 350
+ 
+     // обои рисуются из копии под экран (её делает пикер, magick): оригинал бывает png на 40 МБ, грузился бы секунды.
+diff --git a/config/quickshell/glyph/buds/Buds.qml b/config/quickshell/glyph/buds/Buds.qml
+index 47abe7d..24f891e 100644
+--- a/config/quickshell/glyph/buds/Buds.qml
++++ b/config/quickshell/glyph/buds/Buds.qml
+@@ -45,20 +45,20 @@ PanelWindow {
+ 
+     ParallelAnimation {
+         id: inA
+-        NumberAnimation { target: root; property: "t"; to: 1; duration: 600; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsSoft }
++        NumberAnimation { target: root; property: "t"; to: 1; duration: 600; easing.type: Easing.OutBack; easing.overshoot: 1 }
+         SequentialAnimation {
+             PauseAnimation { duration: 150 }
+             ParallelAnimation {
+                 NumberAnimation { target: root; property: "lit"; to: 1; duration: 300 }
+-                NumberAnimation { target: root; property: "pop"; to: 1; duration: 750; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsSoft }
++                NumberAnimation { target: root; property: "pop"; to: 1; duration: 750; easing.type: Easing.OutBack }
+             }
+         }
+         SequentialAnimation {
+             PauseAnimation { duration: 800 }
+-            NumberAnimation { target: root; property: "res"; to: 1; duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsInOut }
++            NumberAnimation { target: root; property: "res"; to: 1; duration: 700; easing.type: Easing.InOutSine }
+         }
+     }
+-    NumberAnimation { id: outA; target: root; property: "t"; to: 0; duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsCubic }
++    NumberAnimation { id: outA; target: root; property: "t"; to: 0; duration: 380; easing.type: Easing.InCubic }
+     Timer { interval: 6000; running: root.shown && !hov.hovered; onTriggered: root.hide() }
+ 
+     // лёгкое покачивание, пока видно
+@@ -66,8 +66,8 @@ PanelWindow {
+     SequentialAnimation on bob {
+         running: root.visible
+         loops: Animation.Infinite
+-        NumberAnimation { from: 0; to: 1; duration: 1600; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsInOut }
+-        NumberAnimation { from: 1; to: 0; duration: 1600; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsInOut }
++        NumberAnimation { from: 0; to: 1; duration: 1600; easing.type: Easing.InOutSine }
++        NumberAnimation { from: 1; to: 0; duration: 1600; easing.type: Easing.InOutSine }
+     }
+ 
+     visible: t > 0
+@@ -169,7 +169,7 @@ PanelWindow {
+                         readonly property real v: Sys.ear?.[modelData] ?? 0
+                         // своя волна у каждого кольца: от нуля до заряда, цифры считают следом
+                         property real k: 0
+-                        NumberAnimation on k { from: 0; to: 1; duration: 900; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsCubic }
++                        NumberAnimation on k { from: 0; to: 1; duration: 900; easing.type: Easing.OutCubic }
+                         spacing: 8
+                         Item {
+                             width: 84
+diff --git a/config/quickshell/glyph/components/Wall.qml b/config/quickshell/glyph/components/Wall.qml
+index d78cea5..a4b8abc 100644
+--- a/config/quickshell/glyph/components/Wall.qml
++++ b/config/quickshell/glyph/components/Wall.qml
+@@ -62,7 +62,7 @@ Item {
+         next.source = ""; // теперь это старая
+     }
+ 
+-    NumberAnimation { id: run; target: fx; property: "wave"; from: 0; to: 1; duration: 1500; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsInOut; onFinished: root.swap() }
++    NumberAnimation { id: run; target: fx; property: "wave"; from: 0; to: 1; duration: 1500; easing.type: Easing.InOutSine; onFinished: root.swap() }
+ 
+     // источники текстур — соседи эффекта, не дети: эффект без картинок прячем, а невидимому Image сцена не обновляет
+     // текстуру. Поэтому и opacity 0, а не visible: false. sourceSize — в логических пикселях: на DPR Qt умножает сам
+diff --git a/config/quickshell/glyph/glyph/Glyph.qml b/config/quickshell/glyph/glyph/Glyph.qml
+index 11c49d2..1717438 100644
+--- a/config/quickshell/glyph/glyph/Glyph.qml
++++ b/config/quickshell/glyph/glyph/Glyph.qml
+@@ -115,8 +115,8 @@ Scope {
+             SequentialAnimation on opacity {
+                 running: top.shown
+                 loops: Animation.Infinite
+-                NumberAnimation { from: 0.15; to: 1; duration: 720; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsInOut }
+-                NumberAnimation { from: 1; to: 0.15; duration: 1680; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsInOut }
++                NumberAnimation { from: 0.15; to: 1; duration: 720; easing.type: Easing.InOutSine }
++                NumberAnimation { from: 1; to: 0.15; duration: 1680; easing.type: Easing.InOutSine }
+             }
+         }
+     }
+diff --git a/config/quickshell/glyph/lock/LockSurface.qml b/config/quickshell/glyph/lock/LockSurface.qml
+index f39d048..ac5a75b 100644
+--- a/config/quickshell/glyph/lock/LockSurface.qml
++++ b/config/quickshell/glyph/lock/LockSurface.qml
+@@ -158,7 +158,7 @@ WlSessionLockSurface {
+                             radius: 5.5
+                             color: root.auth.fail ? Theme.red : Theme.fg
+                             opacity: root.auth.busy && Math.abs(root.wave * (typed.count + 2) - 1 - index) > 1.2 ? 0.3 : 1
+-                            NumberAnimation on scale { from: 0.2; to: 1; duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsCubic }
++                            NumberAnimation on scale { from: 0.2; to: 1; duration: 180; easing.type: Easing.OutCubic }
+                         }
+                     }
+                     Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 2; height: 24; color: Theme.red; opacity: root.blink ? 1 : 0 }
+diff --git a/config/quickshell/glyph/shot/Shot.qml b/config/quickshell/glyph/shot/Shot.qml
+index 272a80c..068ab24 100644
+--- a/config/quickshell/glyph/shot/Shot.qml
++++ b/config/quickshell/glyph/shot/Shot.qml
+@@ -436,7 +436,7 @@ Scope {
+             id: fx
+             PropertyAction { target: fired; property: "visible"; value: true }
+             ParallelAnimation {
+-                NumberAnimation { target: flash; property: "opacity"; from: 1; to: 0; duration: 900; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ljsSoft }
++                NumberAnimation { target: flash; property: "opacity"; from: 1; to: 0; duration: 900; easing.type: Easing.OutQuad }
+                 NumberAnimation { target: card; property: "t"; from: 0; to: 1; duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide }
+             }
+             PauseAnimation { duration: 2200 }
+-- 
+2.55.0
+

@@ -1,0 +1,47 @@
+From 4a4b1994db072850f629c128a39cfb4024f539c7 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 15:08:42 +0530
+Subject: [PATCH 15/24] =?UTF-8?q?noah:=20bar=20margins=20follow=20Hyprland?=
+ =?UTF-8?q?'s=20real=20gaps=5Fout=20instead=20of=20scaled=20layout=20px=20?=
+ =?UTF-8?q?=E2=80=94=20pill=20lines=20up=20with=20window=20borders=20top?=
+ =?UTF-8?q?=20and=20bottom?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/bar/Bar.qml | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/config/quickshell/glyph/bar/Bar.qml b/config/quickshell/glyph/bar/Bar.qml
+index e308564..122987f 100644
+--- a/config/quickshell/glyph/bar/Bar.qml
++++ b/config/quickshell/glyph/bar/Bar.qml
+@@ -21,7 +21,9 @@ PanelWindow {
+     signal clockClicked
+ 
+     anchors { left: true; top: true; bottom: true }
+-    implicitWidth: Math.ceil(78 * Theme.s)
++    // noah: margins are Hyprland's real gaps_out, not layout px scaled by Theme.s, so the pill lines up with window borders
++    readonly property real edge: Rules.store.gapsOut / Theme.s
++    implicitWidth: Math.ceil(Rules.store.gapsOut + 64 * Theme.s)
+     color: "transparent"
+     WlrLayershell.namespace: "glyph-bar"
+ 
+@@ -40,10 +42,10 @@ PanelWindow {
+     Stage {
+         Rectangle {
+             id: pill
+-            x: 14
+-            y: 14
++            x: root.edge
++            y: root.edge
+             width: 64
+-            height: parent.height - 28
++            height: parent.height - 2 * root.edge
+             radius: 32
+             color: Theme.s1
+             border { width: 1; color: Theme.s2 }
+-- 
+2.55.0
+

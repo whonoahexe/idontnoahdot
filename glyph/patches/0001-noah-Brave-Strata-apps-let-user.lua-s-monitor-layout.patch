@@ -1,0 +1,44 @@
+From 368e3187b82772d7a34b990feb736533b20aad8a Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 12:41:13 +0530
+Subject: [PATCH 01/24] noah: Brave/Strata apps; let user.lua's monitor layout
+ run after Rules.monitor()
+
+---
+ config/hypr/variables.lua                  | 4 ++--
+ config/quickshell/glyph/settings/Rules.qml | 4 +++-
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/config/hypr/variables.lua b/config/hypr/variables.lua
+index 7e74daf..1addf9f 100644
+--- a/config/hypr/variables.lua
++++ b/config/hypr/variables.lua
+@@ -21,8 +21,8 @@ return {
+ 
+     -- Apps
+     terminal                   = "kitty -1", -- single-instance: новые окна из живого процесса, ~40 мс вместо ~400
+-    browser                    = "zen-browser",
+-    fileExplorer               = "thunar",
++    browser                    = "brave", -- noah: was zen-browser
++    fileExplorer               = "strata", -- noah: was thunar
+     audioSettings              = "pavucontrol",
+     -- программы спец-воркспейсов (запускаются, если там пусто) и редактор. Бинды читают их при нажатии,
+     -- так что свои — в user.lua: require("variables").apps.editor = "codium". Не установлено — откроется пустой
+diff --git a/config/quickshell/glyph/settings/Rules.qml b/config/quickshell/glyph/settings/Rules.qml
+index ed93344..a62d1f8 100644
+--- a/config/quickshell/glyph/settings/Rules.qml
++++ b/config/quickshell/glyph/settings/Rules.qml
+@@ -115,7 +115,9 @@ Singleton {
+     function monitor() {
+         if (!mon.name) { monWanted = true; return; }
+         monWanted = false;
+-        hypr(`hl.monitor({ output = "${mon.name}", mode = "${mon.w}x${mon.h}@${hz}", position = "auto", scale = ${store.monScale || '"auto"'} })`);
++        // noah: then let user.lua's monitor layout (hyde_apply_layout: laptop panel off while the
++        // ultrawide is docked, 60 Hz on battery) have the last word, or docking would turn eDP back on
++        hypr(`hl.monitor({ output = "${mon.name}", mode = "${mon.w}x${mon.h}@${hz}", position = "auto", scale = ${store.monScale || '"auto"'} }); if _G.hyde_apply_layout then _G.hyde_apply_layout() end`);
+         monReread.restart();
+     }
+     readonly property var rates: mon.rates.length ? mon.rates : [60, 120]
+-- 
+2.55.0
+

@@ -1,0 +1,49 @@
+From f0cc7066639dc9343a3406382010cf83729d01f4 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 13:16:43 +0530
+Subject: [PATCH 03/24] noah: Super+Q closes the window, Super+Return opens
+ kitty, Super+C unbound; Return in the launcher-interrupt list
+
+---
+ config/hypr/hyprland/keybinds.lua | 2 +-
+ config/hypr/variables.lua         | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/config/hypr/hyprland/keybinds.lua b/config/hypr/hyprland/keybinds.lua
+index 8dba367..d49c1c3 100644
+--- a/config/hypr/hyprland/keybinds.lua
++++ b/config/hypr/hyprland/keybinds.lua
+@@ -14,7 +14,7 @@ for _, key in ipairs({
+     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+     -- Super+<key> binds below
+     "Q", "W", "E", "R", "T", "A", "D", "F", "G", "K", "L", "C", "V", "M", "N", "P",
+-    "Z", "X", "U", "S", "H", "I", "space", "Escape",
++    "Z", "X", "U", "S", "H", "I", "space", "Escape", "Return",
+     "Comma", "Period", "Minus", "Equal", "Backslash",
+     "left", "right", "up", "down",
+     "Page_Up", "Page_Down", "F12",
+diff --git a/config/hypr/variables.lua b/config/hypr/variables.lua
+index 1addf9f..21a053a 100644
+--- a/config/hypr/variables.lua
++++ b/config/hypr/variables.lua
+@@ -104,7 +104,7 @@ return {
+     kbWindowFullscreen         = "SUPER + F",
+     kbWindowBorderedFullscreen = "SUPER + ALT + F",
+     kbToggleWindowFloating     = "SUPER + ALT + space",
+-    kbCloseWindow              = "SUPER + C",
++    kbCloseWindow              = "SUPER + Q", -- noah: was SUPER + C
+ 
+     -- Special workspaces toggles
+     kbSpecialWs                = "SUPER + S",
+@@ -114,7 +114,7 @@ return {
+     kbTodoWs                   = "SUPER + R",
+ 
+     -- Apps
+-    kbTerminal                 = "SUPER + Q",
++    kbTerminal                 = "SUPER + Return", -- noah: was SUPER + Q
+     kbBrowser                  = "SUPER + W",
+     kbEditor                   = "SUPER + SHIFT + K",
+     kbFileExplorer             = "SUPER + E",
+-- 
+2.55.0
+

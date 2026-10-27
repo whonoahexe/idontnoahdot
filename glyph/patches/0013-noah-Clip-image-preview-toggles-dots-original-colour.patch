@@ -1,0 +1,60 @@
+From bba6e5d2735b16bb6454efe2110a0ed9577632d2 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 14:48:34 +0530
+Subject: [PATCH 13/24] =?UTF-8?q?noah:=20Clip=20image=20preview=20toggles?=
+ =?UTF-8?q?=20dots=20=E2=86=94=20original=20colours=20(Ctrl+O=20or=20click?=
+ =?UTF-8?q?),=20remembered=20in=20glyph.json?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/Theme.qml     | 1 +
+ config/quickshell/glyph/clip/Clip.qml | 5 ++++-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index 01f2cb4..ad4f997 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -96,6 +96,7 @@ Singleton {
+             property int recFps: 60
+             property int recQuality: 2     // medium, high, very_high, ultra
+             property bool recCursor: true
++            property bool clipRaw: false   // noah: clip/ image preview in original colours instead of dots (Ctrl+O / click)
+         }
+     }
+ 
+diff --git a/config/quickshell/glyph/clip/Clip.qml b/config/quickshell/glyph/clip/Clip.qml
+index 50b0a3c..813f95c 100644
+--- a/config/quickshell/glyph/clip/Clip.qml
++++ b/config/quickshell/glyph/clip/Clip.qml
+@@ -195,6 +195,7 @@ PanelWindow {
+                         else if (e.key === Qt.Key_Down || ctrl && e.key === Qt.Key_J) root.move(1);
+                         else if (e.key === Qt.Key_Up || ctrl && e.key === Qt.Key_K) root.move(-1);
+                         else if (ctrl && e.key === Qt.Key_P) root.hold();
++                        else if (ctrl && e.key === Qt.Key_O) Theme.state.clipRaw = !Theme.state.clipRaw;
+                         else if (e.key === Qt.Key_Delete) root.burn();
+                         else return;
+                         e.accepted = true;
+@@ -415,14 +416,16 @@ PanelWindow {
+                 fillMode: Image.PreserveAspectFit
+                 horizontalAlignment: Image.AlignLeft
+                 asynchronous: true
+-                layer.enabled: true
++                layer.enabled: !Theme.state.clipRaw
+                 layer.effect: Dm { step: 3 }
++                TapHandler { onTapped: Theme.state.clipRaw = !Theme.state.clipRaw } // noah: dots ↔ original
+             }
+             Row {
+                 id: dims
+                 spacing: 14
+                 Num { anchors.baseline: dlab.baseline; text: `${ipv.m[2]}×${ipv.m[3]}`; font.pixelSize: 34 }
+                 Lb { id: dlab; text: `${ipv.m[1]} · ${ipv.m[0]}` }
++                Lb { anchors.baseline: dlab.baseline; text: `ctrl o · ${Theme.state.clipRaw ? "dots" : "original"}`; color: Theme.mute }
+             }
+         }
+     }
+-- 
+2.55.0
+

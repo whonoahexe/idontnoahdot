@@ -1,0 +1,155 @@
+/* glyph: Apostrophe's preview in the Glyph rice palette (Nothing OS look): black and greys, white for what's "on",
+   Doto for the big title, Space Grotesk / Space Mono like the shell. Loaded from Apostrophe's adwaita.css through
+   /usr/share/apostrophe/media/css/web/glyph.css → this file (pacman hook: /etc/pacman.d/hooks/apostrophe-glyph.hook).
+   html:root beats adwaita.css's own :root blocks, which come after this import. */
+
+/* WebKit doesn't match the installed variable Doto by name: load the file itself */
+@font-face {
+  font-family: "Glyph Doto";
+  src: url("file:///home/noah/.local/share/fonts/glyph/Doto%5BROND%2Cwght%5D.ttf") format("truetype");
+  font-weight: 100 900;
+}
+
+html:root {
+  --text-color: #F2F2F2;
+  --background-color: #0E0E0E;
+  --alt-background-color: #141414;
+  --link-color: #F2F2F2;
+  --blockquote-text-color: #8C8C8C;
+  --blockquote-border-color: #4A4A4A;
+  --header-border-color: #2A2A2A;
+  --hr-background-color: #2A2A2A;
+  --table-tr-border-color: #2A2A2A;
+  --table-td-border-color: #2A2A2A;
+  --kbd-text-color: #F2F2F2;
+  --kbd-background-color: #1A1A1A;
+  --kbd-border-color: #2A2A2A;
+  --kbd-shadow-color: #000000;
+  --glyph-card: #1A1A1A;
+  --glyph-mute: #4A4A4A;
+  --glyph-grey: #8C8C8C;
+}
+
+@media (prefers-color-scheme: light) {
+  html:root {
+    --text-color: #0B0B0B;
+    --background-color: #FFFFFF;
+    --alt-background-color: #F7F7F7;
+    --link-color: #0B0B0B;
+    --blockquote-text-color: #6E6E6E;
+    --blockquote-border-color: #B8B8B8;
+    --header-border-color: #D9D9D9;
+    --hr-background-color: #D9D9D9;
+    --table-tr-border-color: #D9D9D9;
+    --table-td-border-color: #D9D9D9;
+    --kbd-text-color: #0B0B0B;
+    --kbd-background-color: #F1F1F1;
+    --kbd-border-color: #D9D9D9;
+    --kbd-shadow-color: #D9D9D9;
+    --glyph-card: #F1F1F1;
+    --glyph-mute: #B8B8B8;
+    --glyph-grey: #6E6E6E;
+  }
+}
+
+body {
+  font-family: "Space Grotesk", "Fira Sans", sans-serif, color-emoji;
+}
+
+::selection {
+  background: var(--text-color);
+  color: var(--background-color);
+}
+
+/* the title in dots, like the shell's clock; the rest in Space Grotesk */
+h1 {
+  font-family: "Glyph Doto", "Doto", "Space Grotesk", sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+h2, h3, h4, h5, h6 {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 600;
+}
+h6 {
+  color: var(--glyph-grey);
+}
+
+a {
+  color: var(--link-color);
+  text-decoration: underline;
+  text-decoration-color: var(--glyph-mute);
+  text-underline-offset: 0.2em;
+}
+a:hover {
+  text-decoration-color: var(--link-color);
+}
+
+code, kbd, pre {
+  font-family: "Space Mono", "JetBrains Mono", monospace, color-emoji;
+}
+code {
+  background-color: var(--glyph-card);
+  border-radius: 6px;
+}
+pre {
+  background-color: var(--glyph-card) !important;
+  border-radius: 16px;
+}
+kbd {
+  border-radius: 6px;
+}
+
+/* tables as Glyph panels: one rounded outline, hairlines inside, headers as small spaced-out mono labels */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--table-td-border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  width: fit-content;
+  max-width: 100%;
+}
+table th,
+table td {
+  border: none;
+  border-bottom: 1px solid var(--table-td-border-color);
+  border-right: 1px solid var(--table-td-border-color);
+}
+table th:last-child,
+table td:last-child {
+  border-right: none;
+}
+table tr:last-child td {
+  border-bottom: none;
+}
+table tr {
+  border-top: none;
+}
+table th {
+  font-family: "Space Mono", monospace;
+  font-weight: 400;
+  font-size: 0.75em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--glyph-grey);
+}
+
+blockquote {
+  border-left-width: 2px;
+}
+
+hr {
+  height: 1px;
+}
+
+/* task lists: white when done */
+input[type="checkbox"] {
+  accent-color: var(--text-color);
+}
+
+/* code highlighting without colour: keywords white, the rest grey steps, comments dim */
+pre code span { color: inherit !important; background: none !important; font-weight: inherit !important; font-style: normal !important; }
+pre code span.kw, pre code span.cf, pre code span.bu, pre code span.fu, pre code span.ex { color: var(--text-color) !important; font-weight: 700 !important; }
+pre code span.st, pre code span.ch, pre code span.ss, pre code span.dv, pre code span.fl, pre code span.bn { color: var(--glyph-grey) !important; }
+pre code span.co, pre code span.an, pre code span.cv, pre code span.do, pre code span.in { color: var(--glyph-mute) !important; font-style: italic !important; }

@@ -1,0 +1,66 @@
+From 5d87275b4a3fa1f0c3f177eccb02013c66f43e38 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 16:18:17 +0530
+Subject: [PATCH 21/24] =?UTF-8?q?noah:=20clear=20home=20=E2=80=94=20bar=20?=
+ =?UTF-8?q?goes=20bare=20too;=20no=20side=20shade,=20only=20the=20picker's?=
+ =?UTF-8?q?=20top/bottom=20fades,=20so=20the=20picture=20is=20as=20bright?=
+ =?UTF-8?q?=20as=20in=20the=20picker?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/bar/Bar.qml   |  6 ++++--
+ config/quickshell/glyph/home/Back.qml | 13 +------------
+ 2 files changed, 5 insertions(+), 14 deletions(-)
+
+diff --git a/config/quickshell/glyph/bar/Bar.qml b/config/quickshell/glyph/bar/Bar.qml
+index 122987f..9b8e66d 100644
+--- a/config/quickshell/glyph/bar/Bar.qml
++++ b/config/quickshell/glyph/bar/Bar.qml
+@@ -47,8 +47,10 @@ PanelWindow {
+             width: 64
+             height: parent.height - 2 * root.edge
+             radius: 32
+-            color: Theme.s1
+-            border { width: 1; color: Theme.s2 }
++            // noah: clear home (homeUi 1, over a wallpaper) — the bar goes bare too, like the home widgets
++            readonly property bool bare: Theme.state.homeUi === 1 && !!Theme.state.wall
++            color: bare ? "transparent" : Theme.s1
++            border { width: bare ? 0 : 1; color: Theme.s2 }
+ 
+             WheelHandler { onWheel: e => root.go(e.angleDelta.y > 0 ? "-1" : "+1") }
+ 
+diff --git a/config/quickshell/glyph/home/Back.qml b/config/quickshell/glyph/home/Back.qml
+index 3062dda..a9a5b3e 100644
+--- a/config/quickshell/glyph/home/Back.qml
++++ b/config/quickshell/glyph/home/Back.qml
+@@ -59,8 +59,7 @@ PanelWindow {
+         opacity: (1 - Theme.state.wallBright / 100) * (Sys.wallOpen ? 0 : 1)
+     }
+ 
+-    // noah: clear home — the picker's top and bottom shades, plus one from the left over the clock, greeting and the
+-    // widgets (they lose their cards there)
++    // noah: clear home — only the picker's top and bottom shades: the picture stays as bright as in the picker
+     Stage {
+         visible: Theme.state.homeUi === 1 && !!Theme.state.wall
+         Rectangle {
+@@ -80,15 +79,5 @@ PanelWindow {
+                 GradientStop { position: 1; color: Theme.fade(Theme.bg, 0.85) }
+             }
+         }
+-        Rectangle {
+-            width: parent.width * 0.85
+-            height: parent.height
+-            gradient: Gradient {
+-                orientation: Gradient.Horizontal
+-                GradientStop { position: 0; color: Theme.fade(Theme.bg, 0.8) }
+-                GradientStop { position: 0.6; color: Theme.fade(Theme.bg, 0.6) }
+-                GradientStop { position: 1; color: Theme.fade(Theme.bg, 0) }
+-            }
+-        }
+     }
+ }
+-- 
+2.55.0
+

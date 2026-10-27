@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Glyph",
+  "version": "1.0",
+  "description": "Glyph rice (Nothing OS) colours for Brave: black and greys, white for what's active.",
+  "theme": {
+    "colors": {
+      "frame": [14, 14, 14],
+      "frame_inactive": [14, 14, 14],
+      "frame_incognito": [0, 0, 0],
+      "frame_incognito_inactive": [0, 0, 0],
+      "background_tab": [14, 14, 14],
+      "background_tab_inactive": [14, 14, 14],
+      "toolbar": [26, 26, 26],
+      "tab_text": [242, 242, 242],
+      "tab_background_text": [140, 140, 140],
+      "tab_background_text_inactive": [110, 110, 110],
+      "bookmark_text": [242, 242, 242],
+      "toolbar_text": [242, 242, 242],
+      "toolbar_button_icon": [242, 242, 242],
+      "omnibox_background": [14, 14, 14],
+      "omnibox_text": [242, 242, 242],
+      "ntp_background": [0, 0, 0],
+      "ntp_text": [242, 242, 242],
+      "ntp_link": [242, 242, 242],
+      "ntp_header": [42, 42, 42],
+      "button_background": [42, 42, 42, 1.0]
+    },
+    "properties": {
+      "ntp_background_alignment": "center"
+    }
+  }
+}

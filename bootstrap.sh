@@ -100,6 +100,10 @@ fi
 step "Applying the dots"
 "$DOTS/install.sh"
 
+# Glyph: a second, separate rice (glyph/). end4 stays the active one; rice-switch glyph to try it
+step "Installing the Glyph rice next to end4"
+"$DOTS/glyph/install.sh" || warn "Glyph install failed; re-run $DOTS/glyph/install.sh"
+
 if [ ! -x "$HOME/.local/bin/strata" ]; then
   step "Building Strata (file manager) with my patches"
   sudo pacman -S --needed --noconfirm bubblewrap ffmpeg ffmpegthumbnailer fontconfig gstreamer \

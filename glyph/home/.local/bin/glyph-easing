@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Toggle Glyph between the ljs.lol easing (git tag `ljs-easing` in ~/.local/share/glyph)
+# and Glyph's original curves, then reload Hyprland and restart the shell.
+#
+#   glyph-easing          show which easing is active
+#   glyph-easing off      back to Glyph's original easing (git revert)
+#   glyph-easing on       ljs.lol easing again (git cherry-pick)
+set -euo pipefail
+
+REPO="$HOME/.local/share/glyph"
+THEME="$REPO/config/quickshell/glyph/Theme.qml"
+
+status() { grep -q 'property var glide: ljs' "$THEME" && echo on || echo off; }
+
+apply() {
+  hyprctl reload >/dev/null
+  "$HOME/.config/quickshell/rice/rice" restart >/dev/null 2>&1 &
+  echo "ljs.lol easing: $(status)"
+}
+
+case "${1:-}" in
+  "") echo "ljs.lol easing: $(status)" ;;
+  off)
+    [ "$(status)" = off ] && { echo "Already off"; exit 0; }
+    git -C "$REPO" revert --no-edit ljs-easing >/dev/null
+    apply
+    ;;
+  on)
+    [ "$(status)" = on ] && { echo "Already on"; exit 0; }
+    git -C "$REPO" cherry-pick ljs-easing >/dev/null
+    apply
+    ;;
+  *) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 1 ;;
+esac

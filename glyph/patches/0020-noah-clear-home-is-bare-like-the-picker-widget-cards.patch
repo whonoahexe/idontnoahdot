@@ -1,0 +1,78 @@
+From 738c3b20d002d5c780e67010cc1f942c9404682f Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 16:17:07 +0530
+Subject: [PATCH 20/24] =?UTF-8?q?noah:=20clear=20home=20is=20bare=20like?=
+ =?UTF-8?q?=20the=20picker=20=E2=80=94=20widget=20cards=20drop=20their=20f?=
+ =?UTF-8?q?ill=20and=20outline,=20one=20wide=20shade=20from=20the=20left?=
+ =?UTF-8?q?=20keeps=20them=20readable?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/home/Back.qml |  9 +++++----
+ config/quickshell/glyph/home/Home.qml | 11 +++++++----
+ 2 files changed, 12 insertions(+), 8 deletions(-)
+
+diff --git a/config/quickshell/glyph/home/Back.qml b/config/quickshell/glyph/home/Back.qml
+index 7b2d051..3062dda 100644
+--- a/config/quickshell/glyph/home/Back.qml
++++ b/config/quickshell/glyph/home/Back.qml
+@@ -59,7 +59,8 @@ PanelWindow {
+         opacity: (1 - Theme.state.wallBright / 100) * (Sys.wallOpen ? 0 : 1)
+     }
+ 
+-    // noah: clear home — the picker's top and bottom shades, plus one behind the clock and greeting on the left
++    // noah: clear home — the picker's top and bottom shades, plus one from the left over the clock, greeting and the
++    // widgets (they lose their cards there)
+     Stage {
+         visible: Theme.state.homeUi === 1 && !!Theme.state.wall
+         Rectangle {
+@@ -80,12 +81,12 @@ PanelWindow {
+             }
+         }
+         Rectangle {
+-            width: 1300
++            width: parent.width * 0.85
+             height: parent.height
+             gradient: Gradient {
+                 orientation: Gradient.Horizontal
+-                GradientStop { position: 0; color: Theme.fade(Theme.bg, 0.75) }
+-                GradientStop { position: 0.55; color: Theme.fade(Theme.bg, 0.45) }
++                GradientStop { position: 0; color: Theme.fade(Theme.bg, 0.8) }
++                GradientStop { position: 0.6; color: Theme.fade(Theme.bg, 0.6) }
+                 GradientStop { position: 1; color: Theme.fade(Theme.bg, 0) }
+             }
+         }
+diff --git a/config/quickshell/glyph/home/Home.qml b/config/quickshell/glyph/home/Home.qml
+index 9d5c724..d7b94d0 100644
+--- a/config/quickshell/glyph/home/Home.qml
++++ b/config/quickshell/glyph/home/Home.qml
+@@ -357,8 +357,10 @@ PanelWindow {
+         width: span * 220 + (span - 1) * 20
+         height: 220
+         radius: round ? 110 : 40
+-        color: Theme.s1
+-        border { width: 1; color: Theme.s2 }
++        // noah: clear home (homeUi 1, over a wallpaper) — no cards, the widgets sit straight on the shaded picture
++        readonly property bool bare: Theme.state.homeUi === 1 && !!Theme.state.wall
++        color: bare ? "transparent" : Theme.s1
++        border { width: bare ? 0 : 1; color: Theme.s2 }
+     }
+     // круглый виджет: кольцо из точек горит долей f, в центре число и подпись
+     component RingW: Rectangle {
+@@ -370,8 +372,9 @@ PanelWindow {
+         width: 220
+         height: 220
+         radius: 110
+-        color: Theme.s1
+-        border { width: 1; color: Theme.s2 }
++        readonly property bool bare: Theme.state.homeUi === 1 && !!Theme.state.wall // noah: as W
++        color: bare ? "transparent" : Theme.s1
++        border { width: bare ? 0 : 1; color: Theme.s2 }
+         Ring { anchors { fill: parent; margins: 12 } f: rw.f; on: rw.on }
+         Column {
+             anchors.centerIn: parent
+-- 
+2.55.0
+

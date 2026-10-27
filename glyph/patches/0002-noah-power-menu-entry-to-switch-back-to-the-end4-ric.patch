@@ -1,0 +1,39 @@
+From e99a48945d384fe512c880fd5263eaa5e3d8557f Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 12:50:34 +0530
+Subject: [PATCH 02/24] noah: power menu entry to switch back to the end4 rice
+ (rice-switch); arrow keys wrap over items.length
+
+---
+ config/quickshell/glyph/power/Power.qml | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/config/quickshell/glyph/power/Power.qml b/config/quickshell/glyph/power/Power.qml
+index 8f0fa3b..dc2a015 100644
+--- a/config/quickshell/glyph/power/Power.qml
++++ b/config/quickshell/glyph/power/Power.qml
+@@ -17,7 +17,9 @@ PanelWindow {
+         ["SLEEP", () => Quickshell.execDetached(["systemctl", "suspend"])],
+         ["SHUT DOWN", () => Quickshell.execDetached(["systemctl", "poweroff"])],
+         ["REBOOT", () => Quickshell.execDetached(["systemctl", "reboot"])],
+-        ["LOG OUT", () => Hyprland.dispatch("hl.dsp.exit()")]
++        ["LOG OUT", () => Hyprland.dispatch("hl.dsp.exit()")],
++        // noah: ~/.local/bin/rice-switch swaps back to the end4 setup and logs out
++        ["TO END4", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rice-switch", "end4", "--logout"])]
+     ]
+ 
+     function open() {
+@@ -49,8 +51,8 @@ PanelWindow {
+         id: stage
+         focus: true
+         Keys.onPressed: e => {
+-            if (e.key === Qt.Key_Up || e.key === Qt.Key_K) root.sel = (root.sel + 4) % 5;
+-            else if (e.key === Qt.Key_Down || e.key === Qt.Key_J || e.key === Qt.Key_Tab) root.sel = (root.sel + 1) % 5;
++            if (e.key === Qt.Key_Up || e.key === Qt.Key_K) root.sel = (root.sel + root.items.length - 1) % root.items.length;
++            else if (e.key === Qt.Key_Down || e.key === Qt.Key_J || e.key === Qt.Key_Tab) root.sel = (root.sel + 1) % root.items.length;
+             else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) root.accept();
+             else if (e.key === Qt.Key_Escape) root.close();
+             else return;
+-- 
+2.55.0
+

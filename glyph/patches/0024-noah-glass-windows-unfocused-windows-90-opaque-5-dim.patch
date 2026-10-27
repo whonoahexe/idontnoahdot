@@ -1,0 +1,126 @@
+From 6d3a9dee86a4ba6579a4d5ec64d1d07a0dae7585 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 16:31:29 +0530
+Subject: [PATCH 24/24] =?UTF-8?q?noah:=20glass=20windows=20=E2=80=94=20unf?=
+ =?UTF-8?q?ocused=20windows=2090%=20opaque=20+=205%=20dim=20(as=20in=20end?=
+ =?UTF-8?q?4),=20set=20by=20Theme.apply;=20WINDOWS=20solid=20/=20glass=20i?=
+ =?UTF-8?q?n=20the=20wallpaper=20picker=20(G);=20the=201-override=20opacit?=
+ =?UTF-8?q?y=20rule=20only=20when=20a=20window=20opacity=20is=20set?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/hypr/hyprland/rules.lua         | 6 +++++-
+ config/quickshell/glyph/Theme.qml      | 5 ++++-
+ config/quickshell/glyph/shell.qml      | 1 +
+ config/quickshell/glyph/wall/Walls.qml | 6 ++++++
+ 4 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/config/hypr/hyprland/rules.lua b/config/hypr/hyprland/rules.lua
+index 6bc392c..78870b3 100644
+--- a/config/hypr/hyprland/rules.lua
++++ b/config/hypr/hyprland/rules.lua
+@@ -4,7 +4,11 @@ local vars = require("variables")
+ ---- Window rules ----
+ ----------------------
+ 
+-hl.window_rule({ match = { fullscreen = false }, opacity = vars.windowOpacity .. " override" })
++-- noah: only when a window opacity is set: "1 override" also pinned inactive windows at 1, so the shell's
++-- glass windows (Theme.apply: decoration.inactive_opacity) never showed
++if vars.windowOpacity ~= 1 then
++    hl.window_rule({ match = { fullscreen = false }, opacity = vars.windowOpacity .. " override" })
++end
+ 
+ -- приложения (kitty) сами просят maximize при открытии — игнорируем, тайлинг решает сам
+ hl.window_rule({ match = { class = ".*" }, suppress_event = "maximize" })
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index 8f9decd..ef52116 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -96,6 +96,7 @@ Singleton {
+             property int recFps: 60
+             property int recQuality: 2     // medium, high, very_high, ultra
+             property bool recCursor: true
++            property bool winGlass: true    // noah: unfocused windows 90% opaque (frosted by the blur) and 5% dimmed, as in end4
+             property bool bentoRight: false // noah: home widgets against the right edge instead of next to the clock
+             property int homeUi: 0          // noah: home over a wallpaper: 0 default, 1 clear (shade behind the clock, greeting, edges)
+             property bool wallLive: true   // noah: a wallpaper folder's scene/Scene.qml plays over it (look: color)
+@@ -133,7 +134,9 @@ Singleton {
+         const shadow = light ? "rgba(0000002E)" : `rgba(${hex(fg)}1A)`;
+         hypr(`hl.config({ general = { gaps_in = ${g ? 0 : r.gapsIn}, gaps_out = ${g ? 0 : r.gapsOut}, border_size = ${g ? 1 : r.border}, allow_tearing = ${g}, `
+            + `col = { active_border = ${c(fg)}, inactive_border = ${c(s3)} } }, `
+-           + `decoration = { rounding = ${g ? 0 : st.rounding}, blur = { enabled = ${Rules.blurOn} }, shadow = { enabled = ${Rules.shadowOn}, color = "${shadow}" } }, `
++           + `decoration = { rounding = ${g ? 0 : st.rounding}, blur = { enabled = ${Rules.blurOn} }, shadow = { enabled = ${Rules.shadowOn}, color = "${shadow}" }, `
++           // noah: glass windows (st.winGlass) — off in game mode, like the other effects
++           + `active_opacity = 1, inactive_opacity = ${st.winGlass && !g ? 0.9 : 1}, dim_inactive = ${st.winGlass && !g}, dim_strength = 0.05, dim_special = 0.2 }, `
+            + `group = { col = { border_active = ${c(fg)}, border_inactive = ${c(s3)}, border_locked_active = ${c(fg)}, border_locked_inactive = ${c(mute)} }, `
+            + `groupbar = { font_family = "${mono}", text_color = ${c(fg)}, col = { active = ${c(s3)}, inactive = ${c(s1)}, locked_active = ${c(s3)}, locked_inactive = ${c(s1)} } } }, `
+            + `misc = { background_color = ${c(bg)} } })`);
+diff --git a/config/quickshell/glyph/shell.qml b/config/quickshell/glyph/shell.qml
+index 1fbd795..df4317a 100644
+--- a/config/quickshell/glyph/shell.qml
++++ b/config/quickshell/glyph/shell.qml
+@@ -83,6 +83,7 @@ ShellRoot {
+     Connections {
+         target: Theme.state
+         function onRoundingChanged() { Theme.apply(); }
++        function onWinGlassChanged() { Theme.apply(); } // noah
+     }
+     // режим ultra включает/снимает blur и тени поверх настроек — окна перекрасить (герцы и движение ставит сам Rules.setMode).
+     // Игровой — то же и ещё анимации
+diff --git a/config/quickshell/glyph/wall/Walls.qml b/config/quickshell/glyph/wall/Walls.qml
+index e7cbf04..faa638e 100644
+--- a/config/quickshell/glyph/wall/Walls.qml
++++ b/config/quickshell/glyph/wall/Walls.qml
+@@ -33,6 +33,7 @@ PanelWindow {
+     property int bright: 85
+     property int ui: 0        // noah: home over the wallpaper: default / clear
+     property bool live: true  // noah: play the folder's scene/Scene.qml on home (colour look)
++    property bool glass: true // noah: unfocused windows see-through over the wallpaper
+     readonly property bool hasScene: !!view && sceneF.loaded
+     FileView { id: sceneF; path: root.view ? root.view.slice(0, root.view.lastIndexOf("/")) + "/scene/Scene.qml" : ""; printErrors: false }
+ 
+@@ -75,6 +76,7 @@ PanelWindow {
+         bright = s.wallBright;
+         ui = s.homeUi;
+         live = s.wallLive;
++        glass = s.winGlass;
+         if (!scan.running) {
+             fresh = [];
+             scan.running = true;
+@@ -90,6 +92,7 @@ PanelWindow {
+         s.wallLook = look;
+         s.homeUi = ui;
+         s.wallLive = live;
++        s.winGlass = glass;
+         s.wallPitch = pitch;
+         s.wallBright = bright;
+         close();
+@@ -143,6 +146,7 @@ magick "$1[0]" -resize "$3" -quality 90 "$2/.$b.jpg" 2>/dev/null && mv "$2/.$b.j
+             else if (up || down) root.pitch = Math.max(4, Math.min(32, root.pitch + (up ? 1 : -1)));
+             else if (e.key === Qt.Key_U) root.ui = 1 - root.ui;
+             else if (e.key === Qt.Key_A) root.live = !root.live;
++            else if (e.key === Qt.Key_G) root.glass = !root.glass;
+             else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) root.apply();
+             else if (e.key === Qt.Key_Escape) root.close();
+             else return;
+@@ -226,6 +230,7 @@ magick "$1[0]" -resize "$3" -quality 90 "$2/.$b.jpg" 2>/dev/null && mv "$2/.$b.j
+             spacing: 30
+             Pick { label: "look"; opts: root.looks; cur: root.look; onPicked: i => root.look = i }
+             Pick { anchors.right: parent.right; label: "home"; opts: ["default", "clear"]; cur: root.ui; onPicked: i => root.ui = i } // noah
++            Pick { anchors.right: parent.right; label: "windows"; opts: ["solid", "glass"]; cur: root.glass ? 1 : 0; onPicked: i => root.glass = i === 1 } // noah
+             Pick { // noah: only for wallpapers that ship an animated scene; it plays in the colour look
+                 anchors.right: parent.right
+                 visible: root.hasScene
+@@ -310,6 +315,7 @@ magick "$1[0]" -resize "$3" -quality 90 "$2/.$b.jpg" 2>/dev/null && mv "$2/.$b.j
+             Lb { text: "shift ↑↓ light" }
+             Lb { text: "u home" }
+             Lb { visible: root.hasScene; text: "a motion" }
++            Lb { text: "g windows" }
+             Lb { text: "↵ set" }
+             Lb { text: "esc back"; TapHandler { onTapped: root.close() } }
+         }
+-- 
+2.55.0
+

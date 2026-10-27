@@ -1,0 +1,66 @@
+From 25a7b6cd02b73e42499963e0b1b6ced2d4079046 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 16:22:49 +0530
+Subject: [PATCH 23/24] =?UTF-8?q?noah:=20home=20widgets=20can=20sit=20agai?=
+ =?UTF-8?q?nst=20the=20right=20edge=20(Prefs=20=E2=86=92=20Home=20?=
+ =?UTF-8?q?=E2=86=92=20place:=20by=20clock=20/=20right)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/Theme.qml       | 1 +
+ config/quickshell/glyph/home/Home.qml   | 4 +++-
+ config/quickshell/glyph/prefs/Prefs.qml | 2 ++
+ 3 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index 1c7fd01..8f9decd 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -96,6 +96,7 @@ Singleton {
+             property int recFps: 60
+             property int recQuality: 2     // medium, high, very_high, ultra
+             property bool recCursor: true
++            property bool bentoRight: false // noah: home widgets against the right edge instead of next to the clock
+             property int homeUi: 0          // noah: home over a wallpaper: 0 default, 1 clear (shade behind the clock, greeting, edges)
+             property bool wallLive: true   // noah: a wallpaper folder's scene/Scene.qml plays over it (look: color)
+             property string vpnLast: "warp" // noah: vpn/ ring brings back the last tunnel used: warp | proton
+diff --git a/config/quickshell/glyph/home/Home.qml b/config/quickshell/glyph/home/Home.qml
+index 13d8d9b..e15d2ca 100644
+--- a/config/quickshell/glyph/home/Home.qml
++++ b/config/quickshell/glyph/home/Home.qml
+@@ -14,6 +14,8 @@ PanelWindow {
+     id: root
+     // noah: clear home over a wallpaper — no cards (W/RingW), and unlit dots faint white: dark grey reads as holes on a picture
+     readonly property bool bare: Theme.state.homeUi === 1 && !!Theme.state.wall
++    // noah: the 3 × 3 grid (700 wide) next to the clock, or against the right edge with the picker's 150 margin
++    readonly property real bentoX: Theme.state.bentoRight ? stage.width - 150 - 700 : 1140
+     readonly property color unlit: bare ? Theme.fade(Theme.fg, 0.22) : Theme.s3
+ 
+     anchors { left: true; right: true; top: true; bottom: true }
+@@ -96,7 +98,7 @@ PanelWindow {
+                     if (!w) continue;
+                     if (c + w > 3) { r++; c = 0; }
+                     if (r > 2) break;
+-                    out.push({ id, x: 1140 + c * 240, y: 150 + r * 240 });
++                    out.push({ id, x: root.bentoX + c * 240, y: 150 + r * 240 });
+                     c += w;
+                 }
+                 return out;
+diff --git a/config/quickshell/glyph/prefs/Prefs.qml b/config/quickshell/glyph/prefs/Prefs.qml
+index a8ca224..327dbfc 100644
+--- a/config/quickshell/glyph/prefs/Prefs.qml
++++ b/config/quickshell/glyph/prefs/Prefs.qml
+@@ -292,6 +292,8 @@ PanelWindow {
+                 widths: Theme.kinds
+                 onToggled: key => home.cur = root.flip("widgets", key, home.cur)
+             }
++            // noah: where the grid sits on the home screen
++            Pick { label: "place"; opts: ["by clock", "right"]; cur: Theme.state.bentoRight ? 1 : 0; onPicked: i => Theme.state.bentoRight = i === 1 }
+         }
+ 
+         // ---- DECK: экран, снизу по центру — deck, справа — быстрые настройки; оба вылезают по наведению на свой край.
+-- 
+2.55.0
+

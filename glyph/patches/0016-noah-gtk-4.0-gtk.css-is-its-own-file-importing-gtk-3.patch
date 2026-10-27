@@ -1,0 +1,38 @@
+From 9e7df8000fee3faf1fdfa974ac69e0e32afdeffd Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 15:58:23 +0530
+Subject: [PATCH 16/24] noah: gtk-4.0/gtk.css is its own file importing
+ gtk-3.0's, plus GTK4-only rules: Apostrophe's editor/preview background, code
+ and link colours, Space Mono editor
+
+---
+ config/quickshell/glyph/term/gtk-4.0/gtk.css | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+ mode change 120000 => 100644 config/quickshell/glyph/term/gtk-4.0/gtk.css
+
+diff --git a/config/quickshell/glyph/term/gtk-4.0/gtk.css b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+deleted file mode 120000
+index beb3b06..0000000
+--- a/config/quickshell/glyph/term/gtk-4.0/gtk.css
++++ /dev/null
+@@ -1 +0,0 @@
+-../gtk-3.0/gtk.css
+\ No newline at end of file
+diff --git a/config/quickshell/glyph/term/gtk-4.0/gtk.css b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+new file mode 100644
+index 0000000..d770caf
+--- /dev/null
++++ b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+@@ -0,0 +1,9 @@
++/* noah: GTK4 gets the shared glyph stylesheet plus GTK4-only rules (GTK3 can't parse :root variables) */
++@import url("../gtk-3.0/gtk.css");
++
++/* Apostrophe paints its editor and preview background from its own :root variables (#2b2b2f / #26262a in dark),
++   which the @define-color names don't reach; code spans and dimmed link URLs use its own named colours */
++:root { --view-bg-color: #0E0E0E; --view-fg-color: #F2F2F2; --preview-bg-color: #0E0E0E; }
++@define-color code_bg_color #1A1A1A;
++@define-color link_fg_color #4A4A4A;
++.apostrophe-editor { font-family: "Space Mono", "JetBrains Mono", monospace; }
+-- 
+2.55.0
+

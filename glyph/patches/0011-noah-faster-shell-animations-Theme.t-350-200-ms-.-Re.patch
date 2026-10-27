@@ -1,0 +1,26 @@
+From 670d48324c7d36cd60cb7101587145f157b5c34f Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 14:06:50 +0530
+Subject: [PATCH 11/24] noah: faster shell animations (Theme.t 350 -> 200 ms).
+ Revert: git revert fast-anim
+
+---
+ config/quickshell/glyph/Theme.qml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index 25df55d..01f2cb4 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -39,7 +39,7 @@ Singleton {
+ 
+     // glide: ease-out-quart, без перелёта — как bezier glide в hypr
+     readonly property var glide: [0.25, 1, 0.5, 1, 1, 1]
+-    readonly property int t: 350
++    readonly property int t: 200 // noah: was 350 (faster panels). Revert: git revert fast-anim
+ 
+     // обои рисуются из копии под экран (её делает пикер, magick): оригинал бывает png на 40 МБ, грузился бы секунды.
+     // ponytail: копии нет (кэш стёрли, путь вписан руками) — пусто, сетка и шар, пока не открыть пикер
+-- 
+2.55.0
+

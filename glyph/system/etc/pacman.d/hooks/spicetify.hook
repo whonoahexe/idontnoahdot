@@ -1,0 +1,15 @@
+# Re-apply Spicetify (glyph theme, Marketplace) after pacman touches Spotify or spicetify-cli.
+# A Spotify update puts back stock files owned by root: take them back for the user, back up again, apply.
+# A spicetify-cli update leaves Spotify patched but refuses "apply" until it re-patches: the restore fallback.
+# -n: never restarts a running Spotify mid-song; the theme shows on its next start.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = spotify
+Target = spicetify-cli
+
+[Action]
+Description = Re-applying Spicetify for /home/noah...
+When = PostTransaction
+Exec = /bin/sh -c 'u=$(stat -c %U /home/noah); chown -R "$u:" /opt/spotify; runuser -u "$u" -- env HOME=/home/noah sh -c "spicetify -q backup apply -n || spicetify -q restore backup apply -n"'

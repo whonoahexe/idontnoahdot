@@ -1,0 +1,26 @@
+From 5649ad9417621b1ff9133aa1a07c64a1954dd0cb Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 16:01:36 +0530
+Subject: [PATCH 17/24] =?UTF-8?q?noah:=20Apostrophe's=20editor=20widget=20?=
+ =?UTF-8?q?painted=20#0E0E0E=20directly=20=E2=80=94=20its=20--view-bg-colo?=
+ =?UTF-8?q?r=20override=20alone=20didn't=20reach=20the=20GtkSourceView?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/term/gtk-4.0/gtk.css | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/config/quickshell/glyph/term/gtk-4.0/gtk.css b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+index d770caf..7a7380b 100644
+--- a/config/quickshell/glyph/term/gtk-4.0/gtk.css
++++ b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+@@ -7,3 +7,4 @@
+ @define-color code_bg_color #1A1A1A;
+ @define-color link_fg_color #4A4A4A;
+ .apostrophe-editor { font-family: "Space Mono", "JetBrains Mono", monospace; }
++.apostrophe-editor, .apostrophe-editor text, #editor scrolledwindow, #editor { background-color: #0E0E0E; }
+-- 
+2.55.0
+

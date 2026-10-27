@@ -1,0 +1,93 @@
+From d617a2f966d62afee7851d187929f68f0d148ef9 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 16:07:48 +0530
+Subject: [PATCH 18/24] =?UTF-8?q?noah:=20live=20wallpapers=20=E2=80=94=20p?=
+ =?UTF-8?q?icker=20scans=20one=20folder=20down;=20a=20wallpaper=20folder's?=
+ =?UTF-8?q?=20scene/Scene.qml=20plays=20over=20it=20in=20the=20colour=20lo?=
+ =?UTF-8?q?ok,=20only=20on=20the=20home=20screen=20and=20on=20AC;=20'live?=
+ =?UTF-8?q?=20wall'=20toggle=20in=20Prefs=20=E2=86=92=20Look?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/Theme.qml       |  1 +
+ config/quickshell/glyph/home/Back.qml   | 18 ++++++++++++++++++
+ config/quickshell/glyph/prefs/Prefs.qml |  1 +
+ config/quickshell/glyph/wall/Walls.qml  |  2 +-
+ 4 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index b48adec..f253759 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -96,6 +96,7 @@ Singleton {
+             property int recFps: 60
+             property int recQuality: 2     // medium, high, very_high, ultra
+             property bool recCursor: true
++            property bool wallLive: true   // noah: a wallpaper folder's scene/Scene.qml plays over it (look: color)
+             property string vpnLast: "warp" // noah: vpn/ ring brings back the last tunnel used: warp | proton
+             property bool clipRaw: false   // noah: clip/ image preview in original colours instead of dots (Ctrl+O / click)
+         }
+diff --git a/config/quickshell/glyph/home/Back.qml b/config/quickshell/glyph/home/Back.qml
+index 4f8d180..a3a314a 100644
+--- a/config/quickshell/glyph/home/Back.qml
++++ b/config/quickshell/glyph/home/Back.qml
+@@ -1,6 +1,8 @@
+ import QtQuick
+ import Quickshell
+ import Quickshell.Hyprland
++import Quickshell.Io
++import Quickshell.Services.UPower
+ import Quickshell.Wayland
+ import qs
+ import qs.components
+@@ -33,4 +35,20 @@ PanelWindow {
+         Orb { id: orb; visible: Theme.state.orb && !wall.opaque; x: stage.width - 720; y: stage.height - 580; phase: root.phase }
+         Wall { id: wall; anchors.fill: parent; path: Theme.wallSrc(Theme.state.wall); animate: !Sys.wallOpen }
+     }
++
++    // noah: live wallpaper — a wallpaper folder can ship scene/Scene.qml (an animated layer that draws the whole picture,
++    // extracted from Wallpaper Engine for end4). Only in the colour look; it costs ~9 W, so it runs only while home shows
++    // (no windows on the workspace) and on AC, and holds its last frame otherwise
++    readonly property string scene: Theme.state.wall && Theme.state.wallLive && Theme.state.wallLook === 2
++        ? Theme.state.wall.slice(0, Theme.state.wall.lastIndexOf("/")) + "/scene/Scene.qml" : ""
++    property bool sceneOk: false
++    FileView { path: root.scene; printErrors: false; onLoaded: root.sceneOk = true; onLoadFailed: root.sceneOk = false; onPathChanged: root.sceneOk = false }
++    Loader {
++        anchors.fill: parent
++        active: root.sceneOk && !Sys.wallOpen
++        enabled: root.home && !UPower.onBattery // Scene's frame timer runs only while enabled
++        source: active ? "file://" + root.scene : ""
++        opacity: status === Loader.Ready ? 1 : 0
++        Behavior on opacity { NumberAnimation { duration: 600 } }
++    }
+ }
+diff --git a/config/quickshell/glyph/prefs/Prefs.qml b/config/quickshell/glyph/prefs/Prefs.qml
+index 11b379a..a8ca224 100644
+--- a/config/quickshell/glyph/prefs/Prefs.qml
++++ b/config/quickshell/glyph/prefs/Prefs.qml
+@@ -577,6 +577,7 @@ PanelWindow {
+                     Toggle { width: 200; text: "24 hours"; on: Theme.state.clock24; onFlip: Theme.state.clock24 = !Theme.state.clock24 }
+                     Toggle { width: 200; text: "blink"; on: Theme.state.blink; onFlip: Theme.state.blink = !Theme.state.blink }
+                     Toggle { width: 200; text: "edges"; on: Theme.state.edges; onFlip: Theme.state.edges = !Theme.state.edges }
++                    Toggle { width: 200; text: "live wall"; on: Theme.state.wallLive; onFlip: Theme.state.wallLive = !Theme.state.wallLive } // noah
+                     Act {
+                         icon: "\u{F02E9}"
+                         text: "wallpaper"
+diff --git a/config/quickshell/glyph/wall/Walls.qml b/config/quickshell/glyph/wall/Walls.qml
+index 4822e48..260d106 100644
+--- a/config/quickshell/glyph/wall/Walls.qml
++++ b/config/quickshell/glyph/wall/Walls.qml
+@@ -93,7 +93,7 @@ PanelWindow {
+     Process {
+         id: scan
+         command: ["bash", "-c", `shopt -s nullglob nocaseglob; mkdir -p "$2"; todo=()
+-for f in "$1"/*.{jpg,jpeg,png,webp}; do
++for f in "$1"/*.{jpg,jpeg,png,webp} "$1"/*/*.{jpg,jpeg,png,webp}; do # noah: and one folder down (wallpaper + its scene/)
+     if [ "$2/\${f##*/}.jpg" -nt "$f" ]; then printf '%s\\n' "$f"; else todo+=("$f"); fi
+ done
+ [ \${#todo[@]} -eq 0 ] || printf '%s\\0' "\${todo[@]}" | xargs -0 -P 3 -I{} sh -c 'b=$(basename "$1")
+-- 
+2.55.0
+

@@ -1,0 +1,12 @@
+# Glyph colours for Apostrophe's preview: it only reads its own CSS, so after every install/upgrade link
+# ~/.config/apostrophe/glyph.css in next to it and import it from adwaita.css (the stylesheet for light and dark).
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = apostrophe
+
+[Action]
+Description = Linking the Glyph preview style into Apostrophe...
+When = PostTransaction
+Exec = /bin/sh -c 'd=/usr/share/apostrophe/media/css/web; ln -sfn /home/noah/.config/apostrophe/glyph.css "$d/glyph.css"; grep -q "glyph.css" "$d/adwaita.css" || sed -i "1a @import url(\"glyph.css\");" "$d/adwaita.css"'

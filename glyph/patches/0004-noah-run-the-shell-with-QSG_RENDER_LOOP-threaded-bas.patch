@@ -1,0 +1,27 @@
+From a950f805cb4b87e29d28684fb0d1b207983bba21 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 13:38:40 +0530
+Subject: [PATCH 04/24] noah: run the shell with QSG_RENDER_LOOP=threaded
+ (basic loop paced animations at ~62 FPS on 160 Hz)
+
+---
+ config/quickshell/rice/rice | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/config/quickshell/rice/rice b/config/quickshell/rice/rice
+index 2da2231..4f7cafb 100755
+--- a/config/quickshell/rice/rice
++++ b/config/quickshell/rice/rice
+@@ -8,6 +8,9 @@
+ #   rice lock           блокировка текущего шелла (бинд, hypridle, меню питания)
+ q=$HOME/.config/quickshell
+ state=${XDG_STATE_HOME:-$HOME/.local/state}/rice
++# noah: on this NVIDIA laptop Qt falls back to the "basic" render loop, which paces the shell's
++# animations at ~62 FPS on a 160 Hz screen; the threaded loop follows the display (measured 160)
++export QSG_RENDER_LOOP="${QSG_RENDER_LOOP:-threaded}"
+ cur=$(cat "$state/shell" 2>/dev/null)
+ [ -f "$q/$cur/rice.json" ] || cur=glyph
+ 
+-- 
+2.55.0
+
