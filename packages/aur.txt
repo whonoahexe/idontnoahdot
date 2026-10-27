@@ -5,10 +5,11 @@ helium-browser-bin
 linux-wallpaperengine-git
 mpvpaper
 protonplus
+qtengine
+quickshell-git
 slack-desktop
 spicetify-cli
 spotify
-teams-for-linux
 ttf-ms-fonts
 upscayl-bin
 visual-studio-code-bin

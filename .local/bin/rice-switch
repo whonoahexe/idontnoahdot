@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Switch between whole rices: Hyprland config, shell, terminal and theme files.
+#
+#   rice-switch              print the active rice
+#   rice-switch list         list rices
+#   rice-switch <name>       switch, then log out and back in to finish
+#   rice-switch <name> --logout   switch and log out right away (power menus use this)
+#   rice-switch init         one-time setup (already done; safe to re-run)
+#
+# Each rice keeps its own copy of the files that clash between rices in
+# ~/.local/share/rices/<name>/<path> (end4: the real files; glyph: links into
+# ~/.local/share/glyph). The live paths in $HOME are symlinks to the active
+# rice's copy; a path a rice doesn't have is removed while it is active.
+# GTK/icon/cursor settings are saved and restored per rice.
+#
+# Glyph's own `rice switch` only swaps Quickshell shells over one Hyprland
+# config (Glyph <-> Demon's Shot); this swaps the whole setup.
+set -euo pipefail
+
+STORE="$HOME/.local/share/rices"
+STATE="$HOME/.local/state/rice-profile"
+GLYPH="$HOME/.local/share/glyph/config"
+
+# Paths (relative to $HOME) that differ between rices
+PATHS=(
+  .config/hypr
+  .config/kitty
+  .config/fish/config.fish
+  .config/fish/functions/fish_greeting.fish
+  .config/starship.toml
+  .config/fastfetch
+  .config/btop
+  .config/cava
+  .config/gtk-3.0/gtk.css
+  .config/gtk-4.0/gtk.css
+  .config/qtengine
+  .config/qtengine.colors
+)
+GSETTINGS_KEYS=(gtk-theme icon-theme cursor-theme cursor-size color-scheme font-name)
+
+current() { cat "$STATE" 2>/dev/null || echo end4; }
+
+save_gsettings() {
+  for k in "${GSETTINGS_KEYS[@]}"; do
+    printf '%s\t%s\n' "$k" "$(gsettings get org.gnome.desktop.interface "$k")"
+  done > "$STORE/$1/.gsettings"
+}
+
+load_gsettings() {
+  [ -f "$STORE/$1/.gsettings" ] || return 0
+  while IFS=$'\t' read -r k v; do
+    gsettings set org.gnome.desktop.interface "$k" "$v" || echo "warning: could not set $k" >&2
+  done < "$STORE/$1/.gsettings"
+}
+
+link_into() { # link_into <rice> <path> <target>: store entry for a rice that lives elsewhere
+  mkdir -p "$(dirname "$STORE/$1/$2")"
+  ln -sfn "$3" "$STORE/$1/$2"
+}
+
+init() {
+  mkdir -p "$STORE/end4" "$STORE/glyph"
+  # end4: move the real files into its store (only real files; links are already managed)
+  for p in "${PATHS[@]}"; do
+    if [ -e "$HOME/$p" ] && [ ! -L "$HOME/$p" ]; then
+      mkdir -p "$(dirname "$STORE/end4/$p")"
+      mv "$HOME/$p" "$STORE/end4/$p"
+      ln -s "$STORE/end4/$p" "$HOME/$p"
+      echo "end4: $p"
+    fi
+  done
+  [ -f "$STORE/end4/.gsettings" ] || save_gsettings end4
+
+  # glyph: same mapping as its install.sh LINKS
+  local t="$GLYPH/quickshell/glyph/term"
+  link_into glyph .config/hypr "$GLYPH/hypr"
+  link_into glyph .config/kitty "$GLYPH/kitty"
+  link_into glyph .config/fish/config.fish "$GLYPH/fish/config.fish"
+  link_into glyph .config/fish/functions/fish_greeting.fish "$GLYPH/fish/functions/fish_greeting.fish"
+  link_into glyph .config/starship.toml "$t/starship.toml"
+  link_into glyph .config/fastfetch "$t/fastfetch"
+  link_into glyph .config/btop "$t/btop"
+  link_into glyph .config/cava "$t/cava"
+  link_into glyph .config/gtk-3.0/gtk.css "$t/gtk-3.0/gtk.css"
+  link_into glyph .config/gtk-4.0/gtk.css "$t/gtk-4.0/gtk.css"
+  link_into glyph .config/qtengine "$GLYPH/qtengine"
+  link_into glyph .config/qtengine.colors "$t/qtengine.colors"
+
+  # Glyph's own pieces don't clash with anything, so they stay installed
+  ln -sfn "$GLYPH/quickshell/glyph" "$HOME/.config/quickshell/glyph"
+  ln -sfn "$GLYPH/quickshell/rice" "$HOME/.config/quickshell/rice"
+  ln -sfn "$GLYPH/quickshell/rice/rice" "$HOME/.local/bin/rice"
+  mkdir -p "$HOME/.local/share/fonts" "$HOME/.local/state/rice"
+  ln -sfn "$GLYPH/fonts" "$HOME/.local/share/fonts/glyph"
+  echo glyph > "$HOME/.local/state/rice/shell"
+  fc-cache -f >/dev/null
+  [ -f "$STATE" ] || echo end4 > "$STATE"
+  echo "init done; active rice: $(current)"
+}
+
+switch() {
+  local to="$1" from
+  from="$(current)"
+  [ -d "$STORE/$to" ] || { echo "No rice '$to' (have: $(ls "$STORE" | tr '\n' ' '))" >&2; exit 1; }
+  [ "$to" != "$from" ] || { echo "Already on $to"; exit 0; }
+
+  save_gsettings "$from"
+  for p in "${PATHS[@]}"; do
+    local live="$HOME/$p"
+    # An app that saves by replacing the file swaps our link for a real file:
+    # that file is the outgoing rice's newest version, so keep it in its store
+    if [ -e "$live" ] && [ ! -L "$live" ]; then
+      rm -rf "${STORE:?}/$from/$p"
+      mkdir -p "$(dirname "$STORE/$from/$p")"
+      mv "$live" "$STORE/$from/$p"
+    fi
+    if [ -e "$STORE/$to/$p" ] || [ -L "$STORE/$to/$p" ]; then
+      mkdir -p "$(dirname "$live")"
+      ln -sfn "$STORE/$to/$p" "$live"
+    else
+      rm -f "$live"
+    fi
+  done
+  load_gsettings "$to"
+  echo "$to" > "$STATE"
+
+  echo "Switched $from -> $to. Hyprland reads its config, environment and startup apps at login,"
+  echo "so log out and back in to finish."
+  if [ "$logout" = 1 ]; then
+    hyprctl dispatch 'hl.dsp.exit()' >/dev/null
+  elif [ -t 0 ]; then
+    read -rp "Log out now? [y/N] " a
+    [[ "$a" == [yY]* ]] && hyprctl dispatch 'hl.dsp.exit()' >/dev/null
+  fi
+}
+
+logout=0
+[ "${2:-}" = --logout ] && logout=1
+
+case "${1:-}" in
+  "") current ;;
+  list) for d in "$STORE"/*/; do n=$(basename "$d"); [ "$n" = "$(current)" ] && echo "$n (active)" || echo "$n"; done ;;
+  init) init ;;
+  -h|--help) sed -n '2,15s/^# \{0,1\}//p' "$0" ;;
+  *) switch "$1" ;;
+esac

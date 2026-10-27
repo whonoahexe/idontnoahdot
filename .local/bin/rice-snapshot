@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Snapshot and restore everything a shell preset (or a wallpaper/color change) can touch,
+# so trying a downloaded preset is always reversible.
+#
+#   rice-snapshot save [name]      default name: a timestamp
+#   rice-snapshot restore [name]   default: the newest snapshot
+#   rice-snapshot list
+#
+# Snapshots live in ~/.local/share/rice-snapshots/<name>/.
+set -euo pipefail
+
+ROOT="$HOME/.local/share/rice-snapshots"
+
+# Paths relative to $HOME. Whatever is missing at save time is recorded as absent and
+# removed again on restore (e.g. a theme file a preset creates).
+PATHS=(
+  .config/illogical-impulse/config.json
+  .config/hypr/hyprland/shellOverrides
+  .config/hypr/hyprland/colors.lua
+  .config/hypr/hyprlock/colors.conf
+  .local/state/quickshell/user/generated
+  .config/gtk-3.0 .config/gtk-4.0 .gtkrc-2.0 .config/gtkrc .config/gtkrc-2.0
+  .config/fuzzel/fuzzel_theme.ini
+  .config/kdeglobals .config/kcminputrc .config/Kvantum .config/qt5ct .config/qt6ct
+  .config/kde-material-you-colors .config/xsettingsd
+  .local/share/color-schemes .local/share/konsole
+  .config/rofi/themes/icons.rasi
+  .icons/default/index.theme
+)
+GSETTINGS_KEYS=(gtk-theme icon-theme cursor-theme cursor-size color-scheme font-name)
+
+save() {
+  local dir="$ROOT/$1"
+  [ -e "$dir" ] && { echo "Snapshot '$1' already exists" >&2; exit 1; }
+  mkdir -p "$dir/files"
+  : > "$dir/absent"
+  for p in "${PATHS[@]}"; do
+    if [ -e "$HOME/$p" ]; then
+      mkdir -p "$dir/files/$(dirname "$p")"
+      cp -a "$HOME/$p" "$dir/files/$p"
+    else
+      echo "$p" >> "$dir/absent"
+    fi
+  done
+  for k in "${GSETTINGS_KEYS[@]}"; do
+    printf '%s\t%s\n' "$k" "$(gsettings get org.gnome.desktop.interface "$k")"
+  done > "$dir/gsettings"
+  echo "Saved snapshot '$1' ($(du -sh "$dir" | cut -f1)) in $dir"
+}
+
+restore() {
+  local dir="$ROOT/$1"
+  [ -d "$dir/files" ] || { echo "No snapshot '$1'" >&2; exit 1; }
+  # A color change leaves jobs running in the background (KDE/Konsole schemes, VS Code)
+  # that would write their colors over the restored files if they finish afterwards
+  pkill -f 'colors/switchwall.sh' || true
+  pkill -f 'kde-material-you-colors' || true
+  pkill -f 'material-code-set-color.sh' || true
+  sleep 1
+  for p in "${PATHS[@]}"; do
+    if [ -e "$dir/files/$p" ]; then
+      if [ -d "$dir/files/$p" ]; then
+        mkdir -p "$HOME/$p"
+        rsync -a --delete "$dir/files/$p/" "$HOME/$p/"
+      else
+        mkdir -p "$(dirname "$HOME/$p")"
+        cp -a "$dir/files/$p" "$HOME/$p"
+      fi
+    elif grep -qxF "$p" "$dir/absent"; then
+      rm -rf "${HOME:?}/$p"
+    fi
+  done
+  while IFS=$'\t' read -r k v; do
+    # gsettings get prints GVariant syntax ('Adwaita', uint32 24); set accepts it back
+    gsettings set org.gnome.desktop.interface "$k" "$v" || echo "warning: could not restore $k" >&2
+  done < "$dir/gsettings"
+
+  local cursor size
+  cursor="$(gsettings get org.gnome.desktop.interface cursor-theme | tr -d "'")"
+  size="$(gsettings get org.gnome.desktop.interface cursor-size | awk '{print $NF}')"
+  hyprctl reload >/dev/null
+  hyprctl setcursor "$cursor" "$size" >/dev/null || true
+  # VS Code's material-code.primaryColor follows generated/color.txt (restored above);
+  # only that key is touched, so the rest of the editor settings stay as they are
+  "$HOME/.config/quickshell/end4-pC/scripts/colors/code/material-code-set-color.sh" || true
+
+  # Restart the shell so it rereads config.json and the restored colors
+  pkill -x qs || true
+  sleep 1
+  hyprctl eval 'hl.dispatch(hl.dsp.exec_cmd("qs -c end4-pC"))' >/dev/null
+  echo "Restored snapshot '$1'"
+}
+
+case "${1:-}" in
+  save) save "${2:-$(date +%Y%m%d-%H%M%S)}" ;;
+  restore)
+    name="${2:-$(ls -t "$ROOT" 2>/dev/null | head -1)}"
+    [ -n "$name" ] || { echo "No snapshots in $ROOT" >&2; exit 1; }
+    restore "$name"
+    ;;
+  list) ls -lt "$ROOT" 2>/dev/null | tail -n +2 ;;
+  *) echo "usage: rice-snapshot save|restore [name] | list" >&2; exit 1 ;;
+esac

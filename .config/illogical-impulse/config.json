@@ -40,7 +40,7 @@
       "theme": "Adwaita"
     },
     "palette": {
-      "accentColor": "",
+      "accentColor": "#164161",
       "namedScheme": "",
       "namedSchemePrimary": "",
       "namedSchemeSecondary": "",
@@ -48,8 +48,8 @@
     },
     "transparency": {
       "automatic": true,
-      "backgroundTransparency": 0.11,
-      "contentTransparency": 0.57,
+      "backgroundTransparency": 0.11939338235294117,
+      "contentTransparency": 0.579982790988736,
       "enable": true
     },
     "uiBackground": "themed",
@@ -91,7 +91,7 @@
     "centeredWallpaperImage": "",
     "centeredWallpaperOnlyWhenLocked": false,
     "centeredWallpaperShape": "Cookie7Sided",
-    "centeredWallpaperSize": 400,
+    "centeredWallpaperSize": 731,
     "collage": {
       "enable": false,
       "gap": 30,
@@ -105,7 +105,9 @@
     "hideWhenFullscreen": true,
     "liveWallpaper": {
       "pauseBelowPercent": 40,
-      "pauseOnBattery": true
+      "pauseOnBattery": true,
+      "pauseWhenCovered": true,
+      "sceneEnabled": false
     },
     "lockWall": "",
     "parallax": {
@@ -349,7 +351,7 @@
     "battery": {
       "showCharging": true,
       "showPercentage": true,
-      "style": "bar"
+      "style": "ios"
     },
     "borderless": "separated",
     "bottom": false,
@@ -565,7 +567,7 @@
         "clickfingerBehavior": false,
         "disableWhileTyping": true,
         "naturalScroll": true,
-        "scrollFactor": 0.7
+        "scrollFactor": 0.8
       }
     },
     "misc": {
@@ -682,8 +684,8 @@
     "weeb": 0
   },
   "profile": {
-    "avatarPath": "",
-    "avatarPicture": "",
+    "avatarPath": "/home/noah/Pictures/",
+    "avatarPicture": "/home/noah/Pictures/PXL_20261020_153834953.jpg",
     "descriptionText": "::distro::",
     "displayName": "",
     "onlinePresets": true,
@@ -851,19 +853,15 @@
           },
           {
             "size": 1,
-            "type": "batteryOneshot"
-          },
-          {
-            "size": 1,
             "type": "movieMode"
           },
           {
             "size": 1,
-            "type": "gameMode"
+            "type": "animatedWallpaper"
           },
           {
             "size": 1,
-            "type": "leftShift"
+            "type": "gameMode"
           }
         ]
       },

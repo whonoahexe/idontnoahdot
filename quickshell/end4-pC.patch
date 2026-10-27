@@ -1,8 +1,21 @@
+diff --git a/modules/common/Config.qml b/modules/common/Config.qml
+index 98b95c7..6b6de47 100644
+--- a/modules/common/Config.qml
++++ b/modules/common/Config.qml
+@@ -490,6 +490,8 @@ Singleton {
+                 property JsonObject liveWallpaper: JsonObject {
+                     property bool pauseOnBattery: false // Pause as soon as the charger is out
+                     property real pauseBelowPercent: 0 // Or only under this charge, 0 to ignore
++                    property bool sceneEnabled: true // Animated scene layer (scene/Scene.qml next to the wallpaper)
++                    property bool pauseWhenCovered: true // Freeze the scene while a tiled or fullscreen window covers it
+                 }
+                 property list<string> screenList: [] 
+                 property string wallpaperPath: ""
 diff --git a/modules/common/functions/Session.qml b/modules/common/functions/Session.qml
-index c200e65..5097a0a 100644
+index c200e65..029654a 100644
 --- a/modules/common/functions/Session.qml
 +++ b/modules/common/functions/Session.qml
-@@ -59,4 +59,9 @@ Singleton {
+@@ -59,4 +59,16 @@ Singleton {
          closeAllWindows();
          Quickshell.execDetached(["bash", "-c", `systemctl reboot --firmware-setup || loginctl reboot --firmware-setup`]);
      }
@@ -11,66 +24,42 @@ index c200e65..5097a0a 100644
 +        closeAllWindows();
 +        Quickshell.execDetached(["bash", "-c", `sudo -n /usr/local/bin/reboot-to-windows`]);
 +    }
++
++    // ~/.local/bin/rice-switch swaps the whole setup (Hyprland config, shell, theme files)
++    // and logs out, so the next login starts the other rice
++    function switchRice(name) {
++        closeAllWindows();
++        Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/rice-switch`, name, "--logout"]);
++    }
  }
-diff --git a/modules/common/models/quickToggles/BatteryOneshotToggle.qml b/modules/common/models/quickToggles/BatteryOneshotToggle.qml
+diff --git a/modules/common/models/quickToggles/AnimatedWallpaperToggle.qml b/modules/common/models/quickToggles/AnimatedWallpaperToggle.qml
 new file mode 100644
-index 0000000..b505060
+index 0000000..c555f4c
 --- /dev/null
-+++ b/modules/common/models/quickToggles/BatteryOneshotToggle.qml
-@@ -0,0 +1,54 @@
++++ b/modules/common/models/quickToggles/AnimatedWallpaperToggle.qml
+@@ -0,0 +1,23 @@
 +import QtQuick
 +import Quickshell
-+import Quickshell.Io
++import qs.modules.common
 +import qs.services
 +
 +QuickToggleModel {
 +    id: root
-+    property int currentLimit: 0
-+    property int baseLimit: 0
 +
-+    name: Translation.tr("Full charge")
-+    // On = asusd one-shot active (current limit raised above the saved base limit)
-+    toggled: currentLimit > baseLimit && baseLimit > 0
-+    statusText: toggled ? Translation.tr("Charging to %1%").arg(currentLimit) : Translation.tr("Limit %1%").arg(baseLimit)
-+    icon: "battery_charging_full"
++    name: Translation.tr("Animated wallpaper")
++    // On = the wallpaper's scene/Scene.qml layer is loaded (Background.qml);
++    // it still freezes by itself on battery and behind tiled/fullscreen windows
++    statusText: !LiveWallpaper.sceneAvailable ? Translation.tr("No scene")
++        : !LiveWallpaper.sceneEnabled ? Translation.tr("Still image")
++        : LiveWallpaper.scenePausedForPower ? Translation.tr("Paused on battery")
++        : Translation.tr("On")
++    icon: "animation"
++    available: LiveWallpaper.sceneAvailable
++    toggled: LiveWallpaper.sceneEnabled
 +
-+    mainAction: () => {
-+        if (root.toggled)
-+            actionProc.command = ["asusctl", "battery", "limit", `${root.baseLimit}`];
-+        else
-+            actionProc.command = ["asusctl", "battery", "oneshot"];
-+        actionProc.running = true;
-+    }
++    mainAction: () => LiveWallpaper.setSceneEnabled(!LiveWallpaper.sceneEnabled)
 +
-+    Process {
-+        id: actionProc
-+        onExited: fetchState.running = true
-+    }
-+
-+    Process {
-+        id: fetchState
-+        running: true
-+        command: ["bash", "-c", "cat /sys/class/power_supply/BAT*/charge_control_end_threshold | head -1; grep -oP 'base_charge_control_end_threshold:\\s*\\K\\d+' /etc/asusd/asusd.ron"]
-+        stdout: StdioCollector {
-+            id: stateCollector
-+            onStreamFinished: {
-+                const lines = stateCollector.text.trim().split("\n");
-+                root.currentLimit = parseInt(lines[0]) || 0;
-+                root.baseLimit = parseInt(lines[1]) || 0;
-+                root.available = root.currentLimit > 0;
-+            }
-+        }
-+    }
-+
-+    // asusd drops back to the base limit on its own once the battery is full
-+    Timer {
-+        interval: 30000
-+        running: true
-+        repeat: true
-+        onTriggered: fetchState.running = true
-+    }
-+
-+    tooltipText: Translation.tr("One-shot charge to 100% (asusctl)")
++    tooltipText: Translation.tr("Animate the wallpaper's scene. Pauses on battery and behind windows")
 +}
 diff --git a/modules/common/models/quickToggles/CloudflareWarpToggle.qml b/modules/common/models/quickToggles/CloudflareWarpToggle.qml
 index 015010c..c7d710e 100644
@@ -227,43 +216,6 @@ index 015010c..c7d710e 100644
 +
      tooltipText: Translation.tr("Cloudflare WARP (1.1.1.1)")
  }
-diff --git a/modules/common/models/quickToggles/LeftShiftToggle.qml b/modules/common/models/quickToggles/LeftShiftToggle.qml
-new file mode 100644
-index 0000000..ce045d6
---- /dev/null
-+++ b/modules/common/models/quickToggles/LeftShiftToggle.qml
-@@ -0,0 +1,31 @@
-+import QtQuick
-+import Quickshell
-+import qs.modules.common
-+import qs.modules.common.functions
-+import qs.modules.common.models.hyprland
-+import qs.services
-+
-+QuickToggleModel {
-+    id: root
-+    readonly property string keymapPath: FileUtils.trimFileProtocol(`${Directories.config}/xkb/no-left-shift.xkb`)
-+
-+    name: Translation.tr("Left Shift")
-+    // On = left shift works; off = the no-left-shift keymap is loaded
-+    toggled: !(confOpt.value && confOpt.value.length > 0 && confOpt.value !== "[[EMPTY]]")
-+    icon: "shift"
-+
-+    mainAction: () => {
-+        root.toggled = !root.toggled;
-+        if (root.toggled)
-+            HyprlandConfig.reset("input:kb_file");
-+        else
-+            HyprlandConfig.set("input:kb_file", root.keymapPath);
-+    }
-+
-+    HyprlandConfigOption {
-+        id: confOpt
-+        key: "input:kb_file"
-+    }
-+
-+    tooltipText: Translation.tr("Left Shift key")
-+}
 diff --git a/modules/common/models/quickToggles/MovieModeToggle.qml b/modules/common/models/quickToggles/MovieModeToggle.qml
 new file mode 100644
 index 0000000..4df29ef
@@ -328,135 +280,6 @@ index 0000000..4df29ef
 +    }
 +
 +    tooltipText: Translation.tr("Cap the ultrawide at 144 Hz for smooth 24 fps movies")
-+}
-diff --git a/modules/common/models/quickToggles/ProtonVpnToggle.qml b/modules/common/models/quickToggles/ProtonVpnToggle.qml
-new file mode 100644
-index 0000000..e3fa937
---- /dev/null
-+++ b/modules/common/models/quickToggles/ProtonVpnToggle.qml
-@@ -0,0 +1,123 @@
-+import QtQuick
-+import qs
-+import qs.services
-+import qs.modules.common
-+import qs.modules.common.functions
-+import qs.modules.common.widgets
-+import Quickshell
-+import Quickshell.Io
-+
-+QuickToggleModel {
-+    id: root
-+    // "", "connected", "connecting", "disconnected", "missing"
-+    property string state: ""
-+    // NM connection id = Proton server name, e.g. "NL-FREE#12"
-+    property string server: ""
-+    readonly property string countryCode: server.split(/[-#]/)[0]
-+
-+    readonly property var countryNames: ({
-+        "US": "United States", "CA": "Canada", "MX": "Mexico", "NL": "Netherlands",
-+        "CH": "Switzerland", "NO": "Norway", "PL": "Poland", "RO": "Romania",
-+        "JP": "Japan", "SG": "Singapore", "UK": "United Kingdom", "GB": "United Kingdom",
-+        "DE": "Germany", "FR": "France", "SE": "Sweden", "IT": "Italy", "ES": "Spain"
-+    })
-+
-+    name: Translation.tr("Proton VPN")
-+    icon: "vpn_lock"
-+
-+    available: state !== "missing" && state !== ""
-+    toggled: state === "connected" || state === "connecting"
-+    statusText: {
-+        switch (state) {
-+            case "connected": return countryNames[countryCode] ?? server;
-+            case "connecting": return Translation.tr("Connecting…");
-+            case "disconnected": return Translation.tr("Right-click: pick country");
-+            case "missing": return Translation.tr("Not installed");
-+            default: return "";
-+        }
-+    }
-+
-+    function notifyFailure(message, output) {
-+        Quickshell.execDetached(["notify-send",
-+            Translation.tr("Proton VPN"),
-+            `${message}\n${output.trim()}`,
-+            "-a", "Shell"
-+        ])
-+    }
-+
-+    // Two VPNs at once fight over routes and DNS
-+    function disconnectWarp() {
-+        Quickshell.execDetached(["bash", "-c", "command -v warp-cli >/dev/null && warp-cli --accept-tos disconnect"])
-+    }
-+
-+    function openApp() {
-+        root.disconnectWarp()
-+        Quickshell.execDetached(["protonvpn-app"])
-+        GlobalStates.sidebarRightOpen = false
-+    }
-+
-+    // The CLI only lets free accounts connect to the fastest server, so
-+    // picking a country goes through the GUI app
-+    mainAction: () => {
-+        if (root.toggled) {
-+            actionProc.command = ["protonvpn", "disconnect"]
-+        } else {
-+            root.disconnectWarp()
-+            actionProc.command = ["protonvpn", "connect"]
-+            root.state = "connecting"
-+        }
-+        actionProc.running = true
-+    }
-+    altAction: () => root.openApp()
-+
-+    Process {
-+        id: actionProc
-+        stdout: StdioCollector { id: actionCollector }
-+        stderr: StdioCollector { id: actionErrCollector }
-+        onExited: (exitCode, exitStatus) => {
-+            const output = actionCollector.text + actionErrCollector.text
-+            if (output.includes("sign in") || output.includes("signin") || output.includes("Authentication"))
-+                root.notifyFailure(Translation.tr("Not signed in. Right-click the toggle to sign in."), "")
-+            else if (exitCode !== 0)
-+                root.notifyFailure(Translation.tr("Command failed:"), output)
-+            fetchActiveState.running = true
-+        }
-+    }
-+
-+    Process {
-+        id: fetchActiveState
-+        running: true
-+        command: ["bash", "-c", "command -v protonvpn >/dev/null || { echo MISSING; exit; }; "
-+            + "[ -e /sys/class/net/proton0 ] || { echo DOWN; exit; }; "
-+            + "nmcli -t -g GENERAL.STATE,GENERAL.CONNECTION device show proton0"]
-+        stdout: StdioCollector {
-+            id: statusCollector
-+            onStreamFinished: {
-+                const lines = statusCollector.text.trim().split("\n")
-+                const wasConnected = root.state === "connected"
-+                if (lines[0] === "MISSING") {
-+                    root.state = "missing"
-+                } else if (lines[0].startsWith("100")) {
-+                    root.state = "connected"
-+                    root.server = lines[1] ?? ""
-+                    // Also covers connecting from the Proton app itself
-+                    if (!wasConnected) root.disconnectWarp()
-+                } else if (lines[0] !== "DOWN" && /^[4-9]0/.test(lines[0])) {
-+                    root.state = "connecting"
-+                } else if (!actionProc.running) {
-+                    root.state = "disconnected"
-+                }
-+            }
-+        }
-+    }
-+
-+    // Keep the icon honest when the Proton app connects/disconnects
-+    Timer {
-+        interval: 3000
-+        running: true
-+        repeat: true
-+        onTriggered: fetchActiveState.running = true
-+    }
-+
-+    tooltipText: Translation.tr("Proton VPN | Right-click to pick a country")
 +}
 diff --git a/modules/common/widgets/NotificationActionButton.qml b/modules/common/widgets/NotificationActionButton.qml
 index 89b8576..586cfb8 100644
@@ -753,10 +576,10 @@ index ec76349..1ade3d3 100644
          values: root.popup ? Notifications.popupAppNameList : Notifications.appNameList
      }
 diff --git a/modules/ii/background/Background.qml b/modules/ii/background/Background.qml
-index d54a4b9..f0cee27 100644
+index d54a4b9..71b50d2 100644
 --- a/modules/ii/background/Background.qml
 +++ b/modules/ii/background/Background.qml
-@@ -59,6 +59,17 @@ Variants {
+@@ -59,6 +59,29 @@ Variants {
  
          property bool wallpaperIsVideo: bgRoot.effectiveWallpaperPath.endsWith(".mp4") || bgRoot.effectiveWallpaperPath.endsWith(".webm") || bgRoot.effectiveWallpaperPath.endsWith(".mkv") || bgRoot.effectiveWallpaperPath.endsWith(".avi") || bgRoot.effectiveWallpaperPath.endsWith(".mov")
          property string wallpaperPath: wallpaperIsVideo ? Config.options.background.thumbnailPath : bgRoot.effectiveWallpaperPath
@@ -764,6 +587,18 @@ index d54a4b9..f0cee27 100644
 +        readonly property string sceneQmlPath: (wallpaperIsVideo || wallpaperPath === "") ? ""
 +            : `${wallpaperPath.substring(0, wallpaperPath.lastIndexOf("/"))}/scene/Scene.qml`
 +        property bool sceneAvailable: false
++        onSceneAvailableChanged: LiveWallpaper.sceneAvailable = sceneAvailable
++        // A tiled or fullscreen window on this monitor's active workspace hides
++        // nearly all of the wallpaper, so the scene freezes on its current frame
++        readonly property bool sceneCovered: {
++            const wsId = bgRoot.monitor?.activeWorkspace?.id;
++            if (wsId === undefined) return false;
++            return HyprlandData.windowList.some(win => win.workspace?.id === wsId
++                && win.mapped !== false && !win.hidden && (!win.floating || win.fullscreen > 0));
++        }
++        readonly property bool sceneAnimating: !bgRoot.hiddenForFullscreen
++            && !LiveWallpaper.scenePausedForPower
++            && !(bgRoot.sceneCovered && Config.options.background.liveWallpaper.pauseWhenCovered)
 +        FileView {
 +            path: bgRoot.sceneQmlPath
 +            printErrors: false
@@ -774,172 +609,23 @@ index d54a4b9..f0cee27 100644
          property bool wallpaperSafetyTriggered: {
              const enabled = Config.options.workSafety.enable.wallpaper;
              const sensitiveWallpaper = (CF.StringUtils.stringListContainsSubstring(wallpaperPath.toLowerCase(), Config.options.workSafety.triggerCondition.fileKeywords));
-@@ -249,6 +260,14 @@ Variants {
+@@ -249,6 +272,16 @@ Variants {
                  }
              }
  
 +            Loader {
 +                id: sceneLoader
 +                anchors.fill: parent
-+                active: bgRoot.sceneAvailable
++                active: bgRoot.sceneAvailable && LiveWallpaper.sceneEnabled
 +                visible: wallpaper.visible && status === Loader.Ready
++                // The scene's frame timer only runs while enabled; disabled keeps the last frame up
++                enabled: bgRoot.sceneAnimating
 +                source: bgRoot.sceneAvailable ? `file://${bgRoot.sceneQmlPath}` : ""
 +            }
 +
              ShaderEffect {
                  id: transitionEffect
                  anchors.fill: parent
-diff --git a/modules/ii/bar/ClaudeUsage.qml b/modules/ii/bar/ClaudeUsage.qml
-new file mode 100644
-index 0000000..98b3c41
---- /dev/null
-+++ b/modules/ii/bar/ClaudeUsage.qml
-@@ -0,0 +1,145 @@
-+import QtQuick
-+import QtQuick.Layouts
-+import Quickshell.Io
-+import qs.modules.common
-+import qs.modules.common.widgets
-+import qs.services
-+
-+// Anthropic API spend from ~/.local/bin/claude-usage (local records only, no network).
-+MouseArea {
-+    id: root
-+
-+    property bool vertical: false
-+    property var usage: null
-+    readonly property real monthCost: usage?.month?.cost ?? 0
-+    readonly property real budget: usage?.monthly_budget ?? 0
-+    readonly property bool overBudget: budget > 0 && monthCost >= budget
-+
-+    implicitWidth: vertical ? 36 : usageRow.implicitWidth + 12
-+    implicitHeight: vertical ? usageRow.implicitHeight + 6 : 32
-+
-+    hoverEnabled: !Config.options.bar.tooltips.clickToShow
-+    onClicked: usageProc.running = true
-+
-+    function formatCost(cost) {
-+        const value = Math.max(0, Number(cost) || 0)
-+        if (value >= 100) return `$${value.toFixed(0)}`
-+        if (value >= 1) return `$${value.toFixed(2)}`
-+        return `$${value.toFixed(value >= 0.1 ? 2 : 3)}`
-+    }
-+
-+    function formatTokens(count) {
-+        const value = Number(count) || 0
-+        if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`
-+        if (value >= 1e3) return `${(value / 1e3).toFixed(1)}k`
-+        return `${value}`
-+    }
-+
-+    Process {
-+        id: usageProc
-+        running: true
-+        command: ["bash", "-c", "\"$HOME/.local/bin/claude-usage\" --json"]
-+        stdout: StdioCollector {
-+            onStreamFinished: {
-+                try {
-+                    root.usage = JSON.parse(text)
-+                } catch (e) {
-+                    root.usage = null
-+                }
-+            }
-+        }
-+    }
-+
-+    Timer {
-+        interval: 60000
-+        repeat: true
-+        running: true
-+        onTriggered: usageProc.running = true
-+    }
-+
-+    RowLayout {
-+        id: usageRow
-+        anchors.centerIn: parent
-+        spacing: 3
-+
-+        MaterialSymbol {
-+            text: "toll"
-+            iconSize: Appearance.font.pixelSize.normal
-+            color: root.overBudget ? Appearance.colors.colError : Appearance.colors.colPrimary
-+        }
-+
-+        StyledText {
-+            visible: !root.vertical
-+            text: root.usage ? root.formatCost(root.monthCost) : "–"
-+            color: root.overBudget ? Appearance.colors.colError : Appearance.colors.colOnLayer1
-+            font.pixelSize: Appearance.font.pixelSize.smaller
-+            font.weight: Font.Medium
-+            font.features: { "tnum": 1 }
-+        }
-+    }
-+
-+    StyledPopup {
-+        hoverTarget: root
-+
-+        ColumnLayout {
-+            implicitWidth: 280
-+            spacing: 6
-+
-+            StyledText {
-+                text: Translation.tr("Anthropic API spend (estimated)")
-+                font.pixelSize: Appearance.font.pixelSize.normal
-+                font.weight: Font.Medium
-+                color: Appearance.colors.colOnSurfaceVariant
-+            }
-+
-+            StyledPopupValueRow {
-+                Layout.fillWidth: true
-+                icon: "today"
-+                label: Translation.tr("Today")
-+                value: `${root.formatCost(root.usage?.today?.cost)} · ${root.usage?.today?.calls ?? 0} calls`
-+            }
-+            StyledPopupValueRow {
-+                Layout.fillWidth: true
-+                icon: "calendar_month"
-+                label: Translation.tr("This month")
-+                value: `${root.formatCost(root.monthCost)}${root.budget > 0 ? " / " + root.formatCost(root.budget) : ""} · ${root.usage?.month?.calls ?? 0} calls`
-+            }
-+            StyledPopupValueRow {
-+                Layout.fillWidth: true
-+                icon: "functions"
-+                label: Translation.tr("All time")
-+                value: `${root.formatCost(root.usage?.all?.cost)} · ${root.usage?.all?.calls ?? 0} calls`
-+            }
-+            StyledPopupValueRow {
-+                Layout.fillWidth: true
-+                icon: "data_usage"
-+                label: Translation.tr("Month tokens")
-+                value: `in ${root.formatTokens((root.usage?.month?.input ?? 0) + (root.usage?.month?.cache_write ?? 0) + (root.usage?.month?.cache_read ?? 0))} · out ${root.formatTokens(root.usage?.month?.output)}`
-+            }
-+            StyledPopupValueRow {
-+                Layout.fillWidth: true
-+                icon: "cached"
-+                label: Translation.tr("Cache read / write")
-+                value: `${root.formatTokens(root.usage?.month?.cache_read)} / ${root.formatTokens(root.usage?.month?.cache_write)}`
-+            }
-+            StyledPopupValueRow {
-+                Layout.fillWidth: true
-+                icon: "schedule"
-+                label: Translation.tr("Last call")
-+                value: root.usage?.last_call ? root.usage.last_call.replace("T", " ").slice(0, 16) : Translation.tr("never")
-+            }
-+            StyledText {
-+                visible: (root.usage?.unpriced_models?.length ?? 0) > 0
-+                text: Translation.tr("No price for: ") + (root.usage?.unpriced_models ?? []).join(", ")
-+                color: Appearance.colors.colError
-+                font.pixelSize: Appearance.font.pixelSize.smallest
-+            }
-+            StyledText {
-+                text: root.usage ? Translation.tr("Local records only · click to refresh") : Translation.tr("claude-usage failed to run")
-+                color: Appearance.colors.colOnSurfaceVariant
-+                opacity: 0.6
-+                font.pixelSize: Appearance.font.pixelSize.smallest
-+            }
-+        }
-+    }
-+}
 diff --git a/modules/ii/lock/LockSurface.qml b/modules/ii/lock/LockSurface.qml
 index 132664a..ed265dd 100644
 --- a/modules/ii/lock/LockSurface.qml
@@ -1133,18 +819,168 @@ index 12e04d1..c16b0fe 100644
                  }
  
                  DescriptionLabel {
-diff --git a/modules/ii/settings/pages/BarConfig.qml b/modules/ii/settings/pages/BarConfig.qml
-index 0df25c9..827868d 100644
---- a/modules/ii/settings/pages/BarConfig.qml
-+++ b/modules/ii/settings/pages/BarConfig.qml
-@@ -25,6 +25,7 @@ ContentPage {
-         { id: "resources",         name: Translation.tr("Resources"),            icon: "empty_dashboard" },
-         { id: "systemIcons",       name: Translation.tr("System Icons"),         icon: "info" },
-         { id: "networkSpeed",      name: Translation.tr("Network Speed"),        icon: "network_check" },
-+        { id: "claudeUsage",       name: Translation.tr("Claude API Usage"),     icon: "toll" },
-         { id: "clockWidget",       name: Translation.tr("Clock"),                icon: "schedule" },
-         { id: "utilButtons",       name: Translation.tr("Util Buttons"),         icon: "toggle_on" },
-         { id: "sysTray",           name: Translation.tr("Tray"),                 icon: "inbox" },
+diff --git a/modules/ii/settings/pages/QuickConfig.qml b/modules/ii/settings/pages/QuickConfig.qml
+index 4b36886..2cb9737 100644
+--- a/modules/ii/settings/pages/QuickConfig.qml
++++ b/modules/ii/settings/pages/QuickConfig.qml
+@@ -583,5 +583,157 @@ ContentPage {
+                 }
+             }
+         }
++
++        ContentSection {
++            id: riceSection
++            icon: "swap_horiz"
++            title: Translation.tr("Rice")
++            shape: MaterialShape.Shape.Gem
++            Layout.fillWidth: true
++            collapsible: false
++
++            // Which whole-desktop setup is active; ~/.local/bin/rice-switch writes it
++            property string activeRice: (riceStateFile.text() || "end4").trim()
++            FileView {
++                id: riceStateFile
++                path: `${Quickshell.env("HOME")}/.local/state/rice-profile`
++                watchChanges: true
++                printErrors: false
++                onFileChanged: reload()
++            }
++
++            RowLayout {
++                Layout.fillWidth: true
++                spacing: 12
++
++                Repeater {
++                    model: [
++                        { id: "end4", name: "end4", tagline: Translation.tr("Material You, from illogical-impulse") },
++                        { id: "glyph", name: "Glyph", tagline: Translation.tr("Nothing OS: black, white dots, one red"),
++                          image: `file://${Quickshell.env("HOME")}/.local/share/glyph/screenshots/desktop.png` }
++                    ]
++
++                    delegate: Rectangle {
++                        id: riceCard
++                        required property var modelData
++                        readonly property bool active: riceSection.activeRice === modelData.id
++                        // Switching logs out and closes every window, so the first click only arms it
++                        property bool armed: false
++
++                        Layout.fillWidth: true
++                        Layout.preferredWidth: 1
++                        implicitHeight: 236
++                        radius: Appearance.rounding.large - 3
++                        color: cardMouse.containsMouse && !active ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
++                        border.width: active || armed ? 2 : 0
++                        border.color: armed ? Appearance.colors.colErrorContainer : Appearance.colors.colPrimary
++                        Behavior on color { ColorAnimation { duration: 150 } }
++
++                        Rectangle {
++                            id: previewBox
++                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
++                            height: 150
++                            radius: riceCard.radius - 6
++                            color: Appearance.colors.colLayer1
++                            clip: true
++
++                            StyledImage {
++                                anchors.fill: parent
++                                fillMode: Image.PreserveAspectCrop
++                                sourceSize.height: 400
++                                source: riceCard.modelData.id === "end4" ? wallpaperImg.source : riceCard.modelData.image
++                                layer.enabled: true
++                                layer.effect: OpacityMask {
++                                    maskSource: Rectangle {
++                                        width: previewBox.width
++                                        height: previewBox.height
++                                        radius: previewBox.radius
++                                    }
++                                }
++                            }
++
++                            Rectangle {
++                                anchors { top: parent.top; right: parent.right; margins: 8 }
++                                visible: riceCard.active || riceCard.armed || cardMouse.containsMouse
++                                height: 26
++                                width: chipRow.implicitWidth + 20
++                                radius: Appearance.rounding.full
++                                color: riceCard.armed ? Appearance.colors.colErrorContainer
++                                    : riceCard.active ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
++                                readonly property color fg: riceCard.armed ? Appearance.colors.colOnErrorContainer
++                                    : riceCard.active ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
++
++                                RowLayout {
++                                    id: chipRow
++                                    anchors.centerIn: parent
++                                    spacing: 4
++                                    MaterialSymbol {
++                                        text: riceCard.armed ? "logout" : riceCard.active ? "check" : "swap_horiz"
++                                        iconSize: 16
++                                        color: parent.parent.fg
++                                    }
++                                    StyledText {
++                                        text: riceCard.armed ? Translation.tr("Click again: logs out")
++                                            : riceCard.active ? Translation.tr("Active") : Translation.tr("Switch")
++                                        font.pixelSize: Appearance.font.pixelSize.smaller
++                                        color: parent.parent.fg
++                                    }
++                                }
++                            }
++                        }
++
++                        ColumnLayout {
++                            anchors { left: parent.left; right: parent.right; top: previewBox.bottom; leftMargin: 16; rightMargin: 16; topMargin: 10 }
++                            spacing: 2
++                            StyledText {
++                                text: riceCard.modelData.name
++                                font.pixelSize: Appearance.font.pixelSize.larger
++                                font.family: Appearance.font.family.title
++                                font.variableAxes: Appearance.font.variableAxes.title
++                                color: Appearance.colors.colOnLayer2
++                            }
++                            StyledText {
++                                Layout.fillWidth: true
++                                text: riceCard.modelData.tagline
++                                font.pixelSize: Appearance.font.pixelSize.small
++                                color: Appearance.colors.colSubtext
++                                elide: Text.ElideRight
++                            }
++                        }
++
++                        MouseArea {
++                            id: cardMouse
++                            anchors.fill: parent
++                            hoverEnabled: true
++                            cursorShape: riceCard.active ? Qt.ArrowCursor : Qt.PointingHandCursor
++                            onClicked: {
++                                if (riceCard.active) return;
++                                if (!riceCard.armed) {
++                                    riceCard.armed = true;
++                                    disarmTimer.restart();
++                                    return;
++                                }
++                                riceCard.armed = false;
++                                Session.switchRice(riceCard.modelData.id);
++                            }
++                        }
++                        Timer {
++                            id: disarmTimer
++                            interval: 4000
++                            onTriggered: riceCard.armed = false
++                        }
++                    }
++                }
++            }
++
++            StyledText {
++                Layout.fillWidth: true
++                Layout.topMargin: 4
++                wrapMode: Text.WordWrap
++                font.pixelSize: Appearance.font.pixelSize.smaller
++                color: Appearance.colors.colSubtext
++                text: Translation.tr("Switching closes open apps and logs you out; log back in to start the other rice. From Glyph, TO END4 in its Super+Esc menu brings you back.")
++            }
++        }
+     }
+ }
 diff --git a/modules/ii/sidebarLeft/SidebarPlayerControl.qml b/modules/ii/sidebarLeft/SidebarPlayerControl.qml
 index 166e1dd..f220086 100644
 --- a/modules/ii/sidebarLeft/SidebarPlayerControl.qml
@@ -1159,7 +995,7 @@ index 166e1dd..f220086 100644
      property string artDownloadLocation: Directories.coverArt
      property bool showLyrics: Config.options.sidebar.media.showLyrics ?? true
 diff --git a/modules/ii/sidebarRight/quickToggles/AndroidQuickPanel.qml b/modules/ii/sidebarRight/quickToggles/AndroidQuickPanel.qml
-index 1622014..f5c2c02 100644
+index 1622014..a4be503 100644
 --- a/modules/ii/sidebarRight/quickToggles/AndroidQuickPanel.qml
 +++ b/modules/ii/sidebarRight/quickToggles/AndroidQuickPanel.qml
 @@ -29,7 +29,7 @@ AbstractQuickPanel {
@@ -1167,33 +1003,21 @@ index 1622014..f5c2c02 100644
  
      readonly property list<string> availableToggleTypes: {
 -        const base = ["network", "bluetooth", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "colorPicker", "onScreenKeyboard", "mic", "audio", "notifications", "powerProfile","musicRecognition", "antiFlashbang", "vpn"]
-+        const base = ["network", "bluetooth", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "colorPicker", "onScreenKeyboard", "mic", "audio", "notifications", "powerProfile","musicRecognition", "antiFlashbang", "vpn", "leftShift", "batteryOneshot", "movieMode", "protonVpn"]
++        const base = ["network", "bluetooth", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "colorPicker", "onScreenKeyboard", "mic", "audio", "notifications", "powerProfile","musicRecognition", "antiFlashbang", "vpn", "movieMode", "animatedWallpaper"]
          return WM.compositor === "hyprland" ? base : base.filter(t => t !== "gameMode")
      }
      readonly property int columns: Config.options.sidebar.quickToggles.android.columns
-diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidBatteryOneshotToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidBatteryOneshotToggle.qml
+diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidAnimatedWallpaperToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidAnimatedWallpaperToggle.qml
 new file mode 100644
-index 0000000..b208624
+index 0000000..e1fb681
 --- /dev/null
-+++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidBatteryOneshotToggle.qml
++++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidAnimatedWallpaperToggle.qml
 @@ -0,0 +1,6 @@
 +import qs.modules.common.models.quickToggles
 +import QtQuick
 +
 +AndroidQuickToggleButton {
-+    toggleModel: BatteryOneshotToggle {}
-+}
-diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidLeftShiftToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidLeftShiftToggle.qml
-new file mode 100644
-index 0000000..a731f17
---- /dev/null
-+++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidLeftShiftToggle.qml
-@@ -0,0 +1,6 @@
-+import qs.modules.common.models.quickToggles
-+import QtQuick
-+
-+AndroidQuickToggleButton {
-+    toggleModel: LeftShiftToggle {}
++    toggleModel: AnimatedWallpaperToggle {}
 +}
 diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidMovieModeToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidMovieModeToggle.qml
 new file mode 100644
@@ -1207,58 +1031,14 @@ index 0000000..9a9c2cf
 +AndroidQuickToggleButton {
 +    toggleModel: MovieModeToggle {}
 +}
-diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidProtonVpnToggle.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidProtonVpnToggle.qml
-new file mode 100644
-index 0000000..9610789
---- /dev/null
-+++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidProtonVpnToggle.qml
-@@ -0,0 +1,6 @@
-+import qs.modules.common.models.quickToggles
-+import QtQuick
-+
-+AndroidQuickToggleButton {
-+    toggleModel: ProtonVpnToggle {}
-+}
 diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
-index 4934545..5bc0307 100644
+index 4934545..9f84b84 100644
 --- a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
 +++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
-@@ -173,6 +173,70 @@ DelegateChooser {
+@@ -173,6 +173,38 @@ DelegateChooser {
          isUnused: root.isUnused
      } }
  
-+    DelegateChoice { roleValue: "leftShift"; AndroidLeftShiftToggle {
-+        required property int index
-+        required property var modelData
-+        buttonIndex: root.startingIndex + index
-+        buttonData: modelData
-+        editMode: root.editMode
-+        gridRef: root.gridRef
-+        expandedSize: modelData.size > 1
-+        baseCellWidth: root.baseCellWidth
-+        baseCellHeight: root.baseCellHeight
-+        cellSpacing: root.spacing
-+        cellSize: modelData.size
-+        dropIndicatorRef: root.dropIndicatorRef
-+        isUnused: root.isUnused
-+    } }
-+
-+    DelegateChoice { roleValue: "batteryOneshot"; AndroidBatteryOneshotToggle {
-+        required property int index
-+        required property var modelData
-+        buttonIndex: root.startingIndex + index
-+        buttonData: modelData
-+        editMode: root.editMode
-+        gridRef: root.gridRef
-+        expandedSize: modelData.size > 1
-+        baseCellWidth: root.baseCellWidth
-+        baseCellHeight: root.baseCellHeight
-+        cellSpacing: root.spacing
-+        cellSize: modelData.size
-+        dropIndicatorRef: root.dropIndicatorRef
-+        isUnused: root.isUnused
-+    } }
-+
 +    DelegateChoice { roleValue: "movieMode"; AndroidMovieModeToggle {
 +        required property int index
 +        required property var modelData
@@ -1275,7 +1055,7 @@ index 4934545..5bc0307 100644
 +        isUnused: root.isUnused
 +    } }
 +
-+    DelegateChoice { roleValue: "protonVpn"; AndroidProtonVpnToggle {
++    DelegateChoice { roleValue: "animatedWallpaper"; AndroidAnimatedWallpaperToggle {
 +        required property int index
 +        required property var modelData
 +        buttonIndex: root.startingIndex + index
@@ -1294,6 +1074,170 @@ index 4934545..5bc0307 100644
      DelegateChoice { roleValue: "mic"; AndroidMicToggle {
          required property int index
          required property var modelData
+diff --git a/scripts/colors/applycolor.sh b/scripts/colors/applycolor.sh
+index 77b2b74..a970995 100755
+--- a/scripts/colors/applycolor.sh
++++ b/scripts/colors/applycolor.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
+ 
+-QUICKSHELL_CONFIG_NAME="ii"
++QUICKSHELL_CONFIG_NAME="$(basename "$(cd "$(dirname "$0")/../.." && pwd)")" # The config this script lives in (was hardcoded "ii")
+ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+ XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+ XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+diff --git a/scripts/colors/random/random_konachan_wall.sh b/scripts/colors/random/random_konachan_wall.sh
+index 0011924..d76e39f 100755
+--- a/scripts/colors/random/random_konachan_wall.sh
++++ b/scripts/colors/random/random_konachan_wall.sh
+@@ -17,7 +17,7 @@ get_pictures_dir() {
+     echo "$HOME/Pictures"
+ }
+ 
+-QUICKSHELL_CONFIG_NAME="ii"
++QUICKSHELL_CONFIG_NAME="$(basename "$(cd "$(dirname "$0")/../../.." && pwd)")" # The config this script lives in (was hardcoded "ii")
+ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+ XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+ XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+diff --git a/scripts/colors/random/random_osu_wall.sh b/scripts/colors/random/random_osu_wall.sh
+index 54b3af6..58beec3 100755
+--- a/scripts/colors/random/random_osu_wall.sh
++++ b/scripts/colors/random/random_osu_wall.sh
+@@ -17,7 +17,7 @@ get_pictures_dir() {
+     echo "$HOME/Pictures"
+ }
+ 
+-QUICKSHELL_CONFIG_NAME="ii"
++QUICKSHELL_CONFIG_NAME="$(basename "$(cd "$(dirname "$0")/../../.." && pwd)")" # The config this script lives in (was hardcoded "ii")
+ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+ XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+ XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+diff --git a/scripts/colors/switchwall.sh b/scripts/colors/switchwall.sh
+index 0a59f66..4a1528d 100755
+--- a/scripts/colors/switchwall.sh
++++ b/scripts/colors/switchwall.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
+ 
+-QUICKSHELL_CONFIG_NAME="ii"
++QUICKSHELL_CONFIG_NAME="$(basename "$(cd "$(dirname "$0")/../.." && pwd)")" # The config this script lives in (was hardcoded "ii")
+ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+ XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+ XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+@@ -644,6 +644,12 @@ main() {
+         color=""
+     fi
+ 
++    # An accent color is the seed here, not the wallpaper, so a style detected from
++    # the wallpaper (scheme-neutral for dark images) would wash the accent out to grey
++    if [[ "$type_flag" == "auto" && "$color_flag" == "1" ]]; then
++        type_flag="scheme-tonal-spot"
++    fi
++
+     if [[ "$type_flag" == "auto" ]]; then
+         if [[ -n "$imgpath" && -f "$imgpath" ]]; then
+             detected_type="$(detect_scheme_type_from_image "$imgpath")"
+diff --git a/scripts/kvantum/materialQT.sh b/scripts/kvantum/materialQT.sh
+index a049c55..4602ad1 100755
+--- a/scripts/kvantum/materialQT.sh
++++ b/scripts/kvantum/materialQT.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
+ 
+-QUICKSHELL_CONFIG_NAME="ii"
++QUICKSHELL_CONFIG_NAME="$(basename "$(cd "$(dirname "$0")/../.." && pwd)")" # The config this script lives in (was hardcoded "ii")
+ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+ XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+ XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+diff --git a/scripts/lib/config.sh b/scripts/lib/config.sh
+index d4c7eba..845b8b7 100644
+--- a/scripts/lib/config.sh
++++ b/scripts/lib/config.sh
+@@ -7,6 +7,8 @@
+ # "$file.tmp" the callers used before) and validated before the original is
+ # replaced. Concurrent invocations can no longer move a half-written temp over
+ # the config, which is how config.json used to end up empty.
++# Validation needs a JSON object: `jq empty` alone passes on an empty file, so a
++# failed jq upstream (e.g. merging an empty preset) used to empty the config.
+ config_json_replace() {
+     local file="$1"
+     [ -f "$file" ] || return 1
+@@ -14,7 +16,7 @@ config_json_replace() {
+     local tmp
+     tmp="$(mktemp "${file}.XXXXXX")" || return 1
+ 
+-    if cat > "$tmp" && jq empty "$tmp" >/dev/null 2>&1; then
++    if cat > "$tmp" && jq -e 'type == "object"' "$tmp" >/dev/null 2>&1; then
+         mv "$tmp" "$file"
+     else
+         rm -f "$tmp"
+@@ -34,7 +36,7 @@ config_json_update() {
+     local tmp
+     tmp="$(mktemp "${file}.XXXXXX")" || return 1
+ 
+-    if jq "$@" "$file" > "$tmp" 2>/dev/null && jq empty "$tmp" >/dev/null 2>&1; then
++    if jq "$@" "$file" > "$tmp" 2>/dev/null && jq -e 'type == "object"' "$tmp" >/dev/null 2>&1; then
+         mv "$tmp" "$file"
+     else
+         rm -f "$tmp"
+diff --git a/scripts/presets.sh b/scripts/presets.sh
+index fd6f358..8c42706 100755
+--- a/scripts/presets.sh
++++ b/scripts/presets.sh
+@@ -168,10 +168,21 @@ case "$action" in
+             echo "Error: preset not found: $name" >&2
+             exit 1
+         fi
++        # A failed download can leave an empty or broken preset behind
++        if ! jq -e 'type == "object"' "$preset_file" >/dev/null 2>&1; then
++            echo "Error: preset is empty or not valid JSON: $preset_file" >&2
++            notify-send -a Presets "Preset not applied" "'$name' is empty or broken. Remove it and download it again." 2>/dev/null
++            exit 1
++        fi
+         # Filter preset input before merge so blacklisted keys never overwrite local config
+         tmp=$(mktemp)
+         jq "$BLACKLIST_FILTER" "$preset_file" > "$tmp"
+-        jq -s '.[0] * .[1] | del(._presetMeta)' "$CONFIG_FILE" "$tmp" | config_json_replace "$CONFIG_FILE"
++        if ! jq -s '.[0] * .[1] | del(._presetMeta)' "$CONFIG_FILE" "$tmp" | config_json_replace "$CONFIG_FILE"; then
++            rm -f "$tmp"
++            echo "Error: could not merge preset $name into $CONFIG_FILE" >&2
++            notify-send -a Presets "Preset not applied" "Could not merge '$name' into your config. Your config was left unchanged." 2>/dev/null
++            exit 1
++        fi
+         rm -f "$tmp"
+         "$SWITCHWALL" --noswitch
+         ;;
+diff --git a/services/LiveWallpaper.qml b/services/LiveWallpaper.qml
+index a4c8f28..b5f933e 100644
+--- a/services/LiveWallpaper.qml
++++ b/services/LiveWallpaper.qml
+@@ -3,6 +3,7 @@ pragma Singleton
+ import qs.modules.common
+ import Quickshell
+ import Quickshell.Io
++import Quickshell.Services.UPower
+ import QtQuick
+ 
+ /*
+@@ -92,4 +93,18 @@ Singleton {
+         if (root.shouldPauseForPower) root.pause();
+         else if (root.paused) root.resume();
+     }
++
++    // Animated scene layer (scene/Scene.qml next to a still wallpaper), drawn by
++    // Background.qml. Uses UPower.onBattery rather than Battery.isPluggedIn:
++    // at the charge limit the battery is neither charging nor pending, so
++    // isPluggedIn reads false while the charger is in.
++    property bool sceneAvailable: false // set by Background.qml
++    readonly property bool sceneEnabled: Config.options?.background.liveWallpaper.sceneEnabled ?? true
++    readonly property bool scenePausedForPower: UPower.onBattery
++        && (root.pauseOnBattery
++            || (root.pauseBelowPercent > 0 && Battery.percentage * 100 <= root.pauseBelowPercent))
++
++    function setSceneEnabled(value) {
++        Config.options.background.liveWallpaper.sceneEnabled = value;
++    }
+ }
 diff --git a/services/MprisController.qml b/services/MprisController.qml
 index a9214a2..faf4607 100644
 --- a/services/MprisController.qml
@@ -1335,6 +1279,25 @@ index 75c60f4..669dadd 100644
      function timeoutNotification(id) {
          const index = root.list.findIndex((notif) => notif.notificationId === id);
          if (root.list[index] != null)
+diff --git a/services/PresetsOnline.qml b/services/PresetsOnline.qml
+index e7017dc..1b98f16 100644
+--- a/services/PresetsOnline.qml
++++ b/services/PresetsOnline.qml
+@@ -400,7 +400,13 @@ Singleton {
+             const sanitize = root.activeEntry?.sanitize ?? false;
+             const jqFilter = (sanitize ? root.shareFilter : "") + '$files as $files | def fix: walk(if type == "string" then ((split("/") | last) as $base | if ($files | index($base)) then ($dir + "/" + $base) else . end) else . end); fix | if (.background.collage.tree? // null) != null then .background.collage.tree |= (try (fromjson | fix | tojson) catch .) else . end | if has("profile") then .profile.avatarPath = $dir else . end | ._presetMeta.source = "online"';
+             const filesJson = JSON.stringify(assetsProc.assetFilenames);
+-            const cmd = `jq --arg dir ${root.shQuote(assetsProc.assetCacheDirPath)} --argjson files ${root.shQuote(filesJson)} ${root.shQuote(jqFilter)} ${root.shQuote(assetsProc.stagingJsonPath)} > ${root.shQuote(finalJsonPath)} && rm -f ${root.shQuote(assetsProc.stagingJsonPath)}`;
++            // Write to a temp file and keep it only if it is a JSON object: a plain `> final`
++            // creates the file before jq runs, so a failed rewrite left an empty "downloaded" preset
++            const finalTmp = `${finalJsonPath}.part`;
++            const cmd = `jq --arg dir ${root.shQuote(assetsProc.assetCacheDirPath)} --argjson files ${root.shQuote(filesJson)} ${root.shQuote(jqFilter)} ${root.shQuote(assetsProc.stagingJsonPath)} > ${root.shQuote(finalTmp)}`
++                + ` && jq -e 'type == "object"' ${root.shQuote(finalTmp)} >/dev/null`
++                + ` && mv ${root.shQuote(finalTmp)} ${root.shQuote(finalJsonPath)} && rm -f ${root.shQuote(assetsProc.stagingJsonPath)}`
++                + ` || { rm -f ${root.shQuote(finalTmp)}; exit 1; }`;
+             rewriteProc.command = ["bash", "-c", cmd];
+             rewriteProc.running = true;
+         }
 diff --git a/services/ResourceUsage.qml b/services/ResourceUsage.qml
 index c150d3c..b867c8b 100644
 --- a/services/ResourceUsage.qml
