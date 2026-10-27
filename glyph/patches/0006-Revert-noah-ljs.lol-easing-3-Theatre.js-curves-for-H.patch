@@ -1,7 +1,7 @@
 From 714d95cb6c6494c3d36d718875b13798950268de Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 13:52:34 +0530
-Subject: [PATCH 06/24] Revert "noah: ljs.lol easing (3 Theatre.js curves) for
+Subject: [PATCH] Revert "noah: ljs.lol easing (3 Theatre.js curves) for
  Hyprland and the shell"
 
 This reverts commit a8ba0deae18df4c2e7d5c78b855ced2763a5f213.

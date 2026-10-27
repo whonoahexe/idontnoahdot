@@ -153,7 +153,8 @@ if [ -d "$GLYPH/.git" ]; then
   # system/ is not wiped: a hook kept here but not yet installed in /etc must not get lost
   rm -rf glyph/patches glyph/home && mkdir -p glyph/patches glyph/home
   gbase="$(git -C "$GLYPH" describe --tags --abbrev=0 --match 'v*' main)"
-  git -C "$GLYPH" format-patch -q -o "$REPO_DIR/glyph/patches" "$gbase..noah-local"
+  # -N: no "[PATCH n/m]", so adding a commit doesn't rewrite every older patch
+  git -C "$GLYPH" format-patch -q -N -o "$REPO_DIR/glyph/patches" "$gbase..noah-local"
   printf 'repo=%s\nbase=%s\nbranch=noah-local\n' "$(git -C "$GLYPH" remote get-url origin)" "$gbase" > glyph/glyph.base
   # "<tag> <n>": the tag sits on the n-th patch (glyph-easing reverts/cherry-picks ljs-easing)
   for t in $(git -C "$GLYPH" tag -l --no-merged "$gbase" --merged noah-local); do
@@ -168,6 +169,7 @@ if [ -d "$GLYPH/.git" ]; then
     .config/spicetify/Themes/glyph .config/spicetify/Extensions/glyph-move.js
     .local/share/brave-glyph-theme
     .config/apostrophe/glyph.css
+    .config/strata/themes/glyph.toml
   )
   for p in "${GLYPH_HOME[@]}"; do
     [ -e "$HOME/$p" ] || { echo "skip (missing at home): $p"; continue; }

@@ -1,9 +1,9 @@
 From bba6e5d2735b16bb6454efe2110a0ed9577632d2 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 14:48:34 +0530
-Subject: [PATCH 13/24] =?UTF-8?q?noah:=20Clip=20image=20preview=20toggles?=
- =?UTF-8?q?=20dots=20=E2=86=94=20original=20colours=20(Ctrl+O=20or=20click?=
- =?UTF-8?q?),=20remembered=20in=20glyph.json?=
+Subject: [PATCH] =?UTF-8?q?noah:=20Clip=20image=20preview=20toggles=20dots?=
+ =?UTF-8?q?=20=E2=86=94=20original=20colours=20(Ctrl+O=20or=20click),=20re?=
+ =?UTF-8?q?membered=20in=20glyph.json?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

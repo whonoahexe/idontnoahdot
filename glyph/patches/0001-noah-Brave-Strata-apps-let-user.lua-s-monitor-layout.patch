@@ -1,8 +1,8 @@
 From 368e3187b82772d7a34b990feb736533b20aad8a Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 12:41:13 +0530
-Subject: [PATCH 01/24] noah: Brave/Strata apps; let user.lua's monitor layout
- run after Rules.monitor()
+Subject: [PATCH] noah: Brave/Strata apps; let user.lua's monitor layout run
+ after Rules.monitor()
 
 ---
  config/hypr/variables.lua                  | 4 ++--

@@ -1,8 +1,8 @@
 From f0cc7066639dc9343a3406382010cf83729d01f4 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 13:16:43 +0530
-Subject: [PATCH 03/24] noah: Super+Q closes the window, Super+Return opens
- kitty, Super+C unbound; Return in the launcher-interrupt list
+Subject: [PATCH] noah: Super+Q closes the window, Super+Return opens kitty,
+ Super+C unbound; Return in the launcher-interrupt list
 
 ---
  config/hypr/hyprland/keybinds.lua | 2 +-

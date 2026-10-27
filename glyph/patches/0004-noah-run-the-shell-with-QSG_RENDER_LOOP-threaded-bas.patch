@@ -1,8 +1,8 @@
 From a950f805cb4b87e29d28684fb0d1b207983bba21 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 13:38:40 +0530
-Subject: [PATCH 04/24] noah: run the shell with QSG_RENDER_LOOP=threaded
- (basic loop paced animations at ~62 FPS on 160 Hz)
+Subject: [PATCH] noah: run the shell with QSG_RENDER_LOOP=threaded (basic loop
+ paced animations at ~62 FPS on 160 Hz)
 
 ---
  config/quickshell/rice/rice | 3 +++

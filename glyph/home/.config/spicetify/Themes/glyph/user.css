@@ -1203,3 +1203,85 @@ button[data-testid="play-button"] > span,
     width: calc(100vw - var(--panel-gap) * 2 - 32px) !important;
     bottom: calc(var(--panel-gap) + 12px) !important;
 }
+
+/* ---- lyrics, Glyph style: big Space Grotesk on black, the sung line white with the red "live" dot (Text's ">>"
+   marker and album-colour box replaced), what's coming grey, what's been sung dimmer ---- */
+.lyrics-lyrics-container,
+.main-nowPlayingView-section {
+    --lyrics-color-active: var(--spice-text) !important;
+    --lyrics-color-inactive: rgba(var(--spice-rgb-text), 0.35) !important;
+    --lyrics-color-passed: rgba(var(--spice-rgb-text), 0.2) !important;
+    --lyrics-color-background: transparent !important;
+}
+.lyrics-lyrics-background,
+.main-nowPlayingView-sectionHeaderSpacing.main-nowPlayingView-lyricsGradient {
+    background: var(--spice-main) !important;
+}
+.lyrics-lyrics-container *,
+.main-nowPlayingView-lyricsContent * {
+    font-family: "Space Grotesk", sans-serif !important;
+    font-weight: 300 !important;
+    letter-spacing: -0.01em;
+}
+/* the lyrics page */
+.lyrics-lyrics-contentContainer {
+    padding-inline: 64px !important;
+}
+.lyrics-lyrics-container .lyrics-lyricsContent-lyric {
+    font-size: 34px !important;
+    line-height: 1.3 !important;
+    margin-block: 24px !important; /* room between lyrics; a wrapped lyric keeps its own lines tight */
+}
+/* the text can sit in children that Text's catch-all font rules size at 13/14px: take the line's size */
+.lyrics-lyricsContent-lyric * {
+    font-size: inherit !important;
+    line-height: inherit !important;
+    font-weight: inherit !important;
+}
+/* the sidebar card */
+.main-nowPlayingView-lyricsContent .lyrics-lyricsContent-lyric {
+    font-size: 20px !important;
+    line-height: 1.35 !important;
+}
+.lyrics-lyricsContent-lyric {
+    opacity: 1 !important;
+    color: var(--lyrics-color-inactive) !important;
+    align-items: baseline;
+    transition: color 0.3s ease !important;
+}
+/* lines already sung: "previous" in current Spotify ("highlight" in older ones) */
+.lyrics-lyricsContent-lyric.lyrics-lyricsContent-previous,
+.lyrics-lyricsContent-lyric.lyrics-lyricsContent-highlight {
+    color: var(--lyrics-color-passed) !important;
+}
+.lyrics-lyricsContent-lyric.lyrics-lyricsContent-active:not(:empty) {
+    background: none !important;
+    color: var(--spice-text) !important;
+    font-weight: 400 !important;
+}
+/* the marker column: empty for every line, a red dot for the one being sung */
+.lyrics-lyricsContent-lyric:not(:empty)::before,
+.lyrics-lyricsContent-lyric.lyrics-lyricsContent-active:not(:empty)::before {
+    content: "" !important;
+    flex: none;
+    width: 0.32em;
+    height: 0.32em;
+    margin-right: 0.6em;
+    border-radius: 50%;
+    background: var(--spice-red);
+    opacity: 0 !important;
+    transform: translateY(-0.12em);
+    transition: opacity 0.3s ease;
+}
+.lyrics-lyricsContent-lyric.lyrics-lyricsContent-active:not(:empty)::before {
+    opacity: 1 !important;
+}
+/* "Lyrics provided by…" and other notes: small mono labels like the rest of the theme */
+.lyrics-lyrics-container [class*="provider"],
+.lyrics-lyrics-container [class*="footer"] {
+    font-family: "Space Mono", monospace !important;
+    font-size: 11px !important;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--spice-subtext) !important;
+}

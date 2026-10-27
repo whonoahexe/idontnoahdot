@@ -1,10 +1,10 @@
 From 5d87275b4a3fa1f0c3f177eccb02013c66f43e38 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 16:18:17 +0530
-Subject: [PATCH 21/24] =?UTF-8?q?noah:=20clear=20home=20=E2=80=94=20bar=20?=
- =?UTF-8?q?goes=20bare=20too;=20no=20side=20shade,=20only=20the=20picker's?=
- =?UTF-8?q?=20top/bottom=20fades,=20so=20the=20picture=20is=20as=20bright?=
- =?UTF-8?q?=20as=20in=20the=20picker?=
+Subject: [PATCH] =?UTF-8?q?noah:=20clear=20home=20=E2=80=94=20bar=20goes?=
+ =?UTF-8?q?=20bare=20too;=20no=20side=20shade,=20only=20the=20picker's=20t?=
+ =?UTF-8?q?op/bottom=20fades,=20so=20the=20picture=20is=20as=20bright=20as?=
+ =?UTF-8?q?=20in=20the=20picker?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

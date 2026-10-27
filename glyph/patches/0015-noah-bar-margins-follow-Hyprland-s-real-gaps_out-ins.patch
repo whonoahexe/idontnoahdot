@@ -1,8 +1,8 @@
 From 4a4b1994db072850f629c128a39cfb4024f539c7 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 15:08:42 +0530
-Subject: [PATCH 15/24] =?UTF-8?q?noah:=20bar=20margins=20follow=20Hyprland?=
- =?UTF-8?q?'s=20real=20gaps=5Fout=20instead=20of=20scaled=20layout=20px=20?=
+Subject: [PATCH] =?UTF-8?q?noah:=20bar=20margins=20follow=20Hyprland's=20r?=
+ =?UTF-8?q?eal=20gaps=5Fout=20instead=20of=20scaled=20layout=20px=20?=
  =?UTF-8?q?=E2=80=94=20pill=20lines=20up=20with=20window=20borders=20top?=
  =?UTF-8?q?=20and=20bottom?=
 MIME-Version: 1.0

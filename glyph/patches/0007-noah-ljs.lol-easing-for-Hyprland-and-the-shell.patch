@@ -1,7 +1,7 @@
 From a458cf60cc338104eddbf81ccdc31963d177d848 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 13:52:05 +0530
-Subject: [PATCH 07/24] noah: ljs.lol easing for Hyprland and the shell
+Subject: [PATCH] noah: ljs.lol easing for Hyprland and the shell
 
 Opens/closes (Hyprland emphasizedDecel/Accel, shell Theme.glide and appear/disappear
 animations) use its ease-out click ripple cubic-bezier(0.22, 1, 0.36, 1). Moves,

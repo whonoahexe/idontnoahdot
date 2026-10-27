@@ -1,9 +1,9 @@
 From 9e7df8000fee3faf1fdfa974ac69e0e32afdeffd Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 15:58:23 +0530
-Subject: [PATCH 16/24] noah: gtk-4.0/gtk.css is its own file importing
- gtk-3.0's, plus GTK4-only rules: Apostrophe's editor/preview background, code
- and link colours, Space Mono editor
+Subject: [PATCH] noah: gtk-4.0/gtk.css is its own file importing gtk-3.0's,
+ plus GTK4-only rules: Apostrophe's editor/preview background, code and link
+ colours, Space Mono editor
 
 ---
  config/quickshell/glyph/term/gtk-4.0/gtk.css | 10 +++++++++-

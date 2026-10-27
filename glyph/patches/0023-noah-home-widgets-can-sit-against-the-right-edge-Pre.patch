@@ -1,9 +1,9 @@
 From 25a7b6cd02b73e42499963e0b1b6ced2d4079046 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 16:22:49 +0530
-Subject: [PATCH 23/24] =?UTF-8?q?noah:=20home=20widgets=20can=20sit=20agai?=
- =?UTF-8?q?nst=20the=20right=20edge=20(Prefs=20=E2=86=92=20Home=20?=
- =?UTF-8?q?=E2=86=92=20place:=20by=20clock=20/=20right)?=
+Subject: [PATCH] =?UTF-8?q?noah:=20home=20widgets=20can=20sit=20against=20?=
+ =?UTF-8?q?the=20right=20edge=20(Prefs=20=E2=86=92=20Home=20=E2=86=92=20pl?=
+ =?UTF-8?q?ace:=20by=20clock=20/=20right)?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

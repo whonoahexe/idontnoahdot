@@ -1,8 +1,8 @@
 From c88097566e02766227d57c44af3ebe73268467be Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 14:38:38 +0530
-Subject: [PATCH 12/24] noah: Quick's vpn tile drives Cloudflare WARP
- (warp-cli) instead of Clash Verge; state polled with rec/air
+Subject: [PATCH] noah: Quick's vpn tile drives Cloudflare WARP (warp-cli)
+ instead of Clash Verge; state polled with rec/air
 
 ---
  config/quickshell/glyph/Sys.qml | 33 +++++++--------------------------

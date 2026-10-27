@@ -1,8 +1,7 @@
 From 1beeef4d09fc5eaa5b22426220d05a47c38018a7 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 13:59:42 +0530
-Subject: [PATCH 08/24] Revert "noah: ljs.lol easing for Hyprland and the
- shell"
+Subject: [PATCH] Revert "noah: ljs.lol easing for Hyprland and the shell"
 
 This reverts commit a458cf60cc338104eddbf81ccdc31963d177d848.
 ---

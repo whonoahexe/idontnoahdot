@@ -1,11 +1,11 @@
 From 6d3a9dee86a4ba6579a4d5ec64d1d07a0dae7585 Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 16:31:29 +0530
-Subject: [PATCH 24/24] =?UTF-8?q?noah:=20glass=20windows=20=E2=80=94=20unf?=
- =?UTF-8?q?ocused=20windows=2090%=20opaque=20+=205%=20dim=20(as=20in=20end?=
- =?UTF-8?q?4),=20set=20by=20Theme.apply;=20WINDOWS=20solid=20/=20glass=20i?=
- =?UTF-8?q?n=20the=20wallpaper=20picker=20(G);=20the=201-override=20opacit?=
- =?UTF-8?q?y=20rule=20only=20when=20a=20window=20opacity=20is=20set?=
+Subject: [PATCH] =?UTF-8?q?noah:=20glass=20windows=20=E2=80=94=20unfocused?=
+ =?UTF-8?q?=20windows=2090%=20opaque=20+=205%=20dim=20(as=20in=20end4),=20?=
+ =?UTF-8?q?set=20by=20Theme.apply;=20WINDOWS=20solid=20/=20glass=20in=20th?=
+ =?UTF-8?q?e=20wallpaper=20picker=20(G);=20the=201-override=20opacity=20ru?=
+ =?UTF-8?q?le=20only=20when=20a=20window=20opacity=20is=20set?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

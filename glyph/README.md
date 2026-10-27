@@ -16,7 +16,7 @@ Everything Glyph-only is in this folder. Nothing here is needed by end4.
   - `.local/share/glyph/config/hypr/user.lua` — machine overrides (gitignored by Glyph): NVIDIA env, monitor layout shared with end4, VRR, mouse colour, animation speeds, kitty see-through when unfocused
   - `.local/state/rice/glyph.json` + `.config/demonshot/rules.json` — Glyph's settings (wallpaper, looks, widgets, gaps, idle…)
   - `.local/bin/glyph-easing` — switch the ljs.lol easing on/off
-  - Apps themed to match: `.config/spicetify/Themes/glyph` (Spotify, on the Text theme) + `Extensions/glyph-move.js` (right-click → Move to top/bottom in playlists), `.local/share/brave-glyph-theme` (Brave), `.config/apostrophe/glyph.css` (Apostrophe's preview)
+  - Apps themed to match: `.config/spicetify/Themes/glyph` (Spotify, on the Text theme) + `Extensions/glyph-move.js` (right-click → Move to top/bottom in playlists), `.local/share/brave-glyph-theme` (Brave), `.config/apostrophe/glyph.css` (Apostrophe's preview), `.config/strata/themes/glyph.toml` (Strata, on Grayscale Dark)
 - `system/etc/pacman.d/hooks/` — keep those themes through updates: `spicetify.hook` re-applies Spicetify after Spotify / spicetify-cli updates, `apostrophe-glyph.hook` re-links the Apostrophe style
 - `brave/nightTab-glyph.json` — Night Tab settings with the Glyph look (import by hand)
 

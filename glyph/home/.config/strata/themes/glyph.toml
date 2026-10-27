@@ -1,0 +1,18 @@
+# Glyph (Nothing OS rice) for Strata, built on the bundled Grayscale Dark: same untinted greys, pulled to Glyph's
+# palette — #0E0E0E panels, #1A1A1A raised, #2A2A2A hairlines, #F2F2F2 text, white as the "on" colour (accent fills
+# get black text, like Glyph's pills), and red only for danger. Code previews in grey steps, as in Apostrophe.
+name = "Glyph"
+background = "#0E0E0E"
+surface = "#1A1A1A"
+text = "#F2F2F2"
+accent = "#F2F2F2"
+danger = "#D71921"
+muted = "#2A2A2A"
+highlight = "#2A2A2A"
+border = "#2A2A2A"
+dim_text = "#8C8C8C"
+syntax_keyword = "#F2F2F2"
+syntax_string = "#8C8C8C"
+syntax_constant = "#B8B8B8"
+syntax_type = "#D9D9D9"
+syntax_preprocessor = "#6E6E6E"

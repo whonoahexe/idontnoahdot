@@ -1,7 +1,7 @@
 From e99a48945d384fe512c880fd5263eaa5e3d8557f Mon Sep 17 00:00:00 2001
 From: noah <whonoah.exe@gmail.com>
 Date: Tue, 27 Oct 2026 12:50:34 +0530
-Subject: [PATCH 02/24] noah: power menu entry to switch back to the end4 rice
+Subject: [PATCH] noah: power menu entry to switch back to the end4 rice
  (rice-switch); arrow keys wrap over items.length
 
 ---

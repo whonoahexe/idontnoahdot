@@ -1,0 +1,63 @@
+From 3816584b07c495610bfbabe09d67b38c85ca037f Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 17:20:01 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20Strata=20in=20Glyph=20type=20and=20shap?=
+ =?UTF-8?q?e=20=E2=80=94=20Space=20Grotesk=20names,=20Space=20Mono=20caps?=
+ =?UTF-8?q?=20labels,=20white=20pills=20for=20selection=20(icons=20inverte?=
+ =?UTF-8?q?d=20on=20them),=20grey=20pills=20on=20the=20open=20path?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/term/gtk-4.0/gtk.css | 37 ++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/config/quickshell/glyph/term/gtk-4.0/gtk.css b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+index 7a7380b..afe233c 100644
+--- a/config/quickshell/glyph/term/gtk-4.0/gtk.css
++++ b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+@@ -8,3 +8,40 @@
+ @define-color link_fg_color #4A4A4A;
+ .apostrophe-editor { font-family: "Space Mono", "JetBrains Mono", monospace; }
+ .apostrophe-editor, .apostrophe-editor text, #editor scrolledwindow, #editor { background-color: #0E0E0E; }
++
++/* Strata (file manager): its own Glyph palette lives in ~/.config/strata/themes/glyph.toml; this is the type and
++   shape it can't set — Space Grotesk names, Space Mono labels, white pills for what's selected. Strata-only classes */
++.sidebar-shell *, .columns *, .file-list *, .file-list-mode *, .breadcrumb-container *, .location-entry * {
++  font-family: "Space Grotesk", sans-serif;
++}
++.sidebar-heading, .column-header, .column-header *, .status-message {
++  font-family: "Space Mono", monospace;
++  letter-spacing: 0.12em;
++}
++.sidebar-heading, .column-header, .status-message {
++  font-size: 10px;
++  font-weight: 400;
++  color: #8C8C8C;
++}
++.sidebar-heading { padding: 10px 14px 4px; }
++.column-header label { text-transform: uppercase; }
++.sidebar-row, .file-list row { border-radius: 999px; }
++.sidebar-row { padding: 4px 12px; }
++.sidebar-row.active, .sidebar-row.active:hover, .sidebar-device.active, .sidebar-device.active:hover,
++.file-list row:selected, .file-list-mode row:selected {
++  background: #F2F2F2;
++  color: #0E0E0E;
++}
++.sidebar-row.active *, .sidebar-device.active .sidebar-row *, .file-list row:selected *, .file-list-mode row:selected * {
++  color: #0E0E0E;
++}
++/* folders on the open path in the columns you're not in: grey pill */
++.directory-column:not(:focus-within) .file-list row:selected { background: #2A2A2A; color: #F2F2F2; }
++.directory-column:not(:focus-within) .file-list row:selected * { color: #F2F2F2; }
++/* Strata paints file icons white itself: flip them on the white pill; and no focus ring over the pill's ends */
++.file-list row:selected .file-icon, .file-list row:selected .list-file-icon, .file-list row:selected image,
++.file-list-mode row:selected .file-icon, .file-list-mode row:selected .list-file-icon, .file-list-mode row:selected image { filter: invert(1); }
++.directory-column:not(:focus-within) .file-list row:selected .file-icon,
++.directory-column:not(:focus-within) .file-list row:selected .list-file-icon,
++.directory-column:not(:focus-within) .file-list row:selected image { filter: none; }
++.file-list row, .file-list row:selected, .file-list row:focus-visible, .file-list .file-row, .file-list-mode row { outline: none; box-shadow: none; }
+-- 
+2.55.0
+
