@@ -1,0 +1,33 @@
+From b192f7af4cfae88768e052a3dbe1fe4cd6aa1e5d Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 17:39:21 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20Strata=20gets=20Glyph's=20one=20red=20?=
+ =?UTF-8?q?=E2=80=94=20a=20dot=20on=20the=20column=20that=20owns=20the=20k?=
+ =?UTF-8?q?eys,=20the=20caret=20in=20its=20fields,=20the=20fill=20of=20a?=
+ =?UTF-8?q?=20running=20copy/move?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/term/gtk-4.0/gtk.css | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/config/quickshell/glyph/term/gtk-4.0/gtk.css b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+index 9bbc65d..fcf9f83 100644
+--- a/config/quickshell/glyph/term/gtk-4.0/gtk.css
++++ b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+@@ -85,3 +85,10 @@ headerbar button.header-action, headerbar menubutton.header-action > button { bo
+ .preview-table-interactive > scrolledwindow > viewport { background: transparent; }
+ .preview-title { font-family: "Space Grotesk", sans-serif; }
+ .preview-metadata, .preview-metadata * { font-family: "Space Mono", monospace; letter-spacing: 0.08em; }
++/* the one red thing, as in the shell: a dot on the column that owns the keys (the wallpaper picker's "live now" dot),
++   the caret in Strata's own fields, and the fill of a copy/move that's running */
++.column-heading { padding-left: 14px; background-repeat: no-repeat; background-position: 2px center; background-size: 6px 6px; }
++.directory-column:focus-within .column-heading { background-image: radial-gradient(circle closest-side, #D71921 85%, alpha(#D71921, 0) 100%); }
++.location-entry, .location-entry text, .inline-rename, .inline-rename text, .column-filter-entry, .column-filter-entry text,
++.search-field, .search-field text, .preview-command-entry, .preview-command-entry text { caret-color: #D71921; }
++.modal-progress progress, .job-progress progress { background: #D71921; }
+-- 
+2.55.0
+

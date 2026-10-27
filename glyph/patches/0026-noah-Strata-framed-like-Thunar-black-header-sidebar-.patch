@@ -1,0 +1,67 @@
+From 65ed6d06fdf5ec3f272e4013a16c58eedb920707 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 17:33:58 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20Strata=20framed=20like=20Thunar=20?=
+ =?UTF-8?q?=E2=80=94=20black=20header/sidebar/footer,=20listing=20and=20pr?=
+ =?UTF-8?q?eview=20as=20rounded=20s1=20tiles,=20no=20hairlines=20or=20acti?=
+ =?UTF-8?q?ve-column=20bar,=20Space=20Mono=20footer/breadcrumbs/size=20chi?=
+ =?UTF-8?q?ps,=20preview=20pages=20on=20the=20tile?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/term/gtk-4.0/gtk.css | 40 ++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/config/quickshell/glyph/term/gtk-4.0/gtk.css b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+index afe233c..9bbc65d 100644
+--- a/config/quickshell/glyph/term/gtk-4.0/gtk.css
++++ b/config/quickshell/glyph/term/gtk-4.0/gtk.css
+@@ -45,3 +45,43 @@
+ .directory-column:not(:focus-within) .file-list row:selected .list-file-icon,
+ .directory-column:not(:focus-within) .file-list row:selected image { filter: none; }
+ .file-list row, .file-list row:selected, .file-list row:focus-visible, .file-list .file-row, .file-list-mode row { outline: none; box-shadow: none; }
++
++/* noah: Strata framed like Glyph's Thunar: black chrome (header, sidebar, footer), the listing and the preview each
++   a rounded s1 tile on it (the preview slot keeps its width when empty, so it stays a second tile), no hairlines; the
++   3px white "active column" bar goes, the column's caps label lights up instead. Strata sizes the columns pane to fit
++   its columns exactly, so the gaps sit on the sidebar's and preview's side, never inside or right of the listing.
++   headerbar is unscoped but only restates headerbar_bg_color/border above */
++headerbar { background: #000000; border-bottom: none; box-shadow: none; }
++.preview-split, .sidebar-split, .sidebar-shell, .sidebar-scroll viewport, .sidebar { background: #000000; }
++.sidebar-shell { border-right: none; padding-right: 6px; }
++.sidebar-split > separator, .sidebar-split > separator.wide, .preview-split > separator { background: none; box-shadow: none; }
++.sidebar-split > separator + overlay, .preview-split > separator + * { background: #0E0E0E; border-radius: 28px; margin-bottom: 12px; }
++.sidebar-split > separator + overlay { padding: 8px 0 14px; }
++.preview-split > separator + * { margin: 0 12px 12px; }
++.preview-pane { background: none; padding-bottom: 14px; }
++.preview-header { border-bottom: none; }
++.columns, .directory-column, .directory-column scrolledwindow, .directory-column viewport, .directory-column listview,
++.column-filter { background: transparent; }
++.column-header, .active-column .column-header { background: transparent; border-top-color: transparent; border-bottom: none; }
++.directory-column:focus-within .column-header, .active-column .column-header { color: #F2F2F2; }
++.shortcut-footer { background: #000000; border-top: none; font-family: "Space Mono", monospace; letter-spacing: 0.12em; color: #8C8C8C; padding: 0 18px 8px; }
++.shortcut-footer * { font-family: "Space Mono", monospace; }
++.breadcrumb { font-family: "Space Mono", monospace; }
++.breadcrumb.current { color: #F2F2F2; }
++headerbar button.header-action, headerbar menubutton.header-action > button { border-radius: 999px; }
++/* the last column's divider would sit on the card's edge; it still lights up while you drag it */
++.columns > :last-child .column-resize-handle { border-right-color: transparent; }
++.columns > :last-child .column-resize-handle:hover, .columns > :last-child .column-resize-handle.resize-hover { border-right-color: #F2F2F2; }
++/* size chip: a Space Mono pill; on the white pill it turns into a black one */
++.file-size { font-family: "Space Mono", monospace; border-radius: 999px; }
++.file-list row:selected .file-size { background: #0E0E0E; color: #F2F2F2; }
++/* preview: the card itself is the page (s1, like Apostrophe's editor), so code blocks and tables keep their step up */
++.preview-content, .preview-content scrolledwindow, .preview-content viewport,
++.preview-text, .preview-text text, .preview-text border.left, .preview-document, .preview-document text, .preview-virtual-list,
++.preview-virtual-list > row, .preview-virtual-list > row:hover, .preview-virtual-list > row:active, .preview-virtual-list > row:selected,
++.preview-virtual-row, .preview-source-row, .preview-source-lines text { background: transparent; }
++/* tables keep the s2 step on their cells only; the frame around them reserves blank height that would show as a slab */
++.preview-document-table, .preview-document-table > listview, .preview-table-interactive > scrolledwindow,
++.preview-table-interactive > scrolledwindow > viewport { background: transparent; }
++.preview-title { font-family: "Space Grotesk", sans-serif; }
++.preview-metadata, .preview-metadata * { font-family: "Space Mono", monospace; letter-spacing: 0.08em; }
+-- 
+2.55.0
+
