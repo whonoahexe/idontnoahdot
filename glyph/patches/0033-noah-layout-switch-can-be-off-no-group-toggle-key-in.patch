@@ -1,0 +1,29 @@
+From 8aaeaa0a8f268c6ed1b1aee10e3121502ab9a6b6 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Fri, 30 Oct 2026 13:38:00 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20layout=20switch=20can=20be=20off=20?=
+ =?UTF-8?q?=E2=80=94=20no=20group=20toggle=20key=20in=20kb=5Foptions?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/settings/Rules.qml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/config/quickshell/glyph/settings/Rules.qml b/config/quickshell/glyph/settings/Rules.qml
+index a62d1f8..6966722 100644
+--- a/config/quickshell/glyph/settings/Rules.qml
++++ b/config/quickshell/glyph/settings/Rules.qml
+@@ -133,7 +133,7 @@ Singleton {
+     }
+     // ponytail: только вкл/выкл; slam/snap — переопределять кривые из animations.lua
+     function motion() { hypr(`hl.config({ animations = { enabled = ${moving} } })`); }
+-    readonly property var switches: [["alt+shift", "grp:alt_shift_toggle"], ["caps", "grp:caps_toggle"], ["ctrl+shift", "grp:ctrl_shift_toggle"]]
++    readonly property var switches: [["alt+shift", "grp:alt_shift_toggle"], ["caps", "grp:caps_toggle"], ["ctrl+shift", "grp:ctrl_shift_toggle"], ["off", ""]]
+     function input() {
+         const s = store;
+         hypr(`hl.config({ input = { kb_options = "${switches[s.kbSwitch]?.[1] ?? switches[0][1]}", repeat_delay = ${s.repeatDelay}, repeat_rate = ${s.repeatRate}, `
+-- 
+2.55.0
+

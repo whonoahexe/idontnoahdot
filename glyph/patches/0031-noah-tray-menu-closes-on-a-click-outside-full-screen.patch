@@ -1,0 +1,68 @@
+From 04e4691fafb59aec69117ed2486da800e4b7f152 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Wed, 28 Oct 2026 16:25:54 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20tray=20menu=20closes=20on=20a=20click?=
+ =?UTF-8?q?=20outside=20=E2=80=94=20full-screen=20catcher=20like=20cal/,?=
+ =?UTF-8?q?=20the=20focus=20grab=20never=20cleared?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/bar/Bar.qml | 25 +++++++++++++------------
+ 1 file changed, 13 insertions(+), 12 deletions(-)
+
+diff --git a/config/quickshell/glyph/bar/Bar.qml b/config/quickshell/glyph/bar/Bar.qml
+index c31617b..4458ab6 100644
+--- a/config/quickshell/glyph/bar/Bar.qml
++++ b/config/quickshell/glyph/bar/Bar.qml
+@@ -471,26 +471,26 @@ PanelWindow {
+         menu: root.menuStack.length ? root.menuStack[root.menuStack.length - 1] : root.menuItem?.hasMenu ? root.menuItem.menu : null
+     }
+ 
+-    PopupWindow {
++    // a full-screen catcher like cal/Cal (HyprlandFocusGrab never cleared on an outside click here)
++    PanelWindow {
+         id: trayPop
++        screen: root.screen
+         visible: root.menuItem !== null
+-        anchor.item: pill
+-        anchor.rect: Qt.rect(pill.width + 14, root.menuY, 1, 1)
+-        anchor.edges: Edges.Top | Edges.Left
+-        anchor.gravity: Edges.Bottom | Edges.Right
+-        implicitWidth: Math.ceil(300 * Theme.s)
+-        implicitHeight: Math.ceil(menuCard.height * Theme.s)
++        anchors { left: true; right: true; top: true; bottom: true }
++        exclusionMode: ExclusionMode.Ignore
+         color: "transparent"
++        WlrLayershell.layer: WlrLayer.Overlay
++        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
++        WlrLayershell.namespace: "glyph-traymenu"
+ 
+-        HyprlandFocusGrab {
+-            active: trayPop.visible
+-            windows: [trayPop]
+-            onCleared: root.closeMenu()
+-        }
++        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onClicked: root.closeMenu() }
+ 
+         Stage {
+             Rectangle {
+                 id: menuCard
++                // beside the bar pill (edge + 64 + 14), top level with the icon, kept on screen
++                x: root.edge + 78
++                y: Math.max(root.edge, Math.min(root.edge + root.menuY, parent.height - height - root.edge))
+                 width: 300
+                 height: menuCol.height + 28
+                 radius: 26
+@@ -498,6 +498,7 @@ PanelWindow {
+                 border { width: 1; color: Theme.s2 }
+                 focus: true
+                 Keys.onEscapePressed: root.closeMenu()
++                MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons } // clicks between rows stay in the card
+ 
+                 Column {
+                     id: menuCol
+-- 
+2.55.0
+

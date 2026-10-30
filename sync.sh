@@ -56,6 +56,7 @@ SYSTEM_FILES=(
 HARDWARE_FILES=(
   /etc/modprobe.d/mt7921e.conf
   /etc/systemd/system/nvidia-persistenced-boost.service
+  /usr/local/bin/reboot-to-windows
 )
 
 # Packages: everything installed explicitly, minus the base system (comes from
@@ -98,7 +99,10 @@ if [ -d "$END4_STORE" ]; then
   rm -f .config/fish/functions/fish_greeting.fish
 fi
 
+# /etc/sudoers.d is root-only, so its files can't be re-read here: the repo's copies are kept across the wipe
+keep="$(mktemp -d)"; cp -a --parents system/*/etc/sudoers.d "$keep" 2>/dev/null || true
 rm -rf system && mkdir -p system/common system/hardware
+cp -a "$keep/system" . 2>/dev/null || true; rm -rf "$keep"
 for f in "${SYSTEM_FILES[@]}"; do [ -f "$f" ] && install -D -m 644 "$f" "system/common$f"; done
 for f in "${HARDWARE_FILES[@]}"; do [ -f "$f" ] && install -D -m 644 "$f" "system/hardware$f"; done
 systemctl list-unit-files --state=enabled --no-legend --type=service,socket \

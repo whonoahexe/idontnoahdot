@@ -1,8 +1,8 @@
 {
     "bar": [
+        "apps",
         "wifi",
         "bluetooth",
-        "sound",
         "notes",
         "battery",
         "power"
@@ -35,8 +35,9 @@
     "recFps": 60,
     "recQuality": 2,
     "rounding": 22,
+    "trayOpen": false,
     "unread": 0,
-    "vpnLast": "warp",
+    "vpnLast": "proton",
     "wall": "",
     "wallBright": 100,
     "wallDir": "",

@@ -76,12 +76,13 @@ fi
 install_pkgs "$DOTS/packages/pacman.txt"
 install_pkgs "$DOTS/packages/aur.txt"
 
-step "Installing system tweaks into /etc"
+step "Installing system tweaks into /etc and /usr/local/bin"
 install_tree() {
   local root="$1"
   [ -d "$root" ] || return 0
-  (cd "$root" && find etc -type f) | while read -r f; do
-    sed "s#/home/noah#$HOME#g" "$root/$f" | sudo install -D -m 644 /dev/stdin "/$f"
+  (cd "$root" && find etc usr -type f 2>/dev/null) | while read -r f; do
+    local mode=644; case "$f" in etc/sudoers.d/*) mode=440 ;; usr/local/bin/*) mode=755 ;; esac
+    sed "s#/home/noah#$HOME#g" "$root/$f" | sudo install -D -m "$mode" /dev/stdin "/$f"
     echo "installed /$f"
   done
 }

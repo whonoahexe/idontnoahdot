@@ -1,0 +1,162 @@
+From 059f7cf639b87bb1de331849b14ea683ca54861a Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Tue, 27 Oct 2026 18:44:35 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20bar=20apps=20part=20=E2=80=94=20the=20s?=
+ =?UTF-8?q?ystem=20tray=20behind=20an=20arrow;=20tray=20icons=20of=20backg?=
+ =?UTF-8?q?round=20apps=20(Slack,=20Discord=E2=80=A6)=20stack=20above=20it?=
+ =?UTF-8?q?=20in=20their=20own=20colours=20so=20badges=20show,=20left/righ?=
+ =?UTF-8?q?t/middle=20click=20=3D=20window/menu/secondary;=20folded,=20a?=
+ =?UTF-8?q?=20red=20dot=20while=20one=20wants=20attention?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/Theme.qml       |  5 +-
+ config/quickshell/glyph/bar/Bar.qml     | 70 ++++++++++++++++++++++++-
+ config/quickshell/glyph/prefs/Prefs.qml |  2 +-
+ 3 files changed, 72 insertions(+), 5 deletions(-)
+
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index ef52116..99f9be5 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -88,7 +88,7 @@ Singleton {
+             property bool quickHover: true // быстрые настройки по наведению на правый край
+             property bool deckHover: true  // deck — панель снизу по центру, вылезает по наведению на край
+             property var deck: ["clock", "weather", "perf", "net", "media"] // её секции по порядку, см. decks
+-            property var bar: ["layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power"] // трей бара сверху вниз, см. bars
++            property var bar: ["apps", "layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power"] // трей бара сверху вниз, см. bars
+             property bool barTitle: true   // заголовок окна столбиком в баре
+             // запись (quick/Rec, Sys.recArgs)
+             property int recArea: 0        // 0 весь монитор, 1 область (slurp)
+@@ -101,6 +101,7 @@ Singleton {
+             property int homeUi: 0          // noah: home over a wallpaper: 0 default, 1 clear (shade behind the clock, greeting, edges)
+             property bool wallLive: true   // noah: a wallpaper folder's scene/Scene.qml plays over it (look: color)
+             property string vpnLast: "warp" // noah: vpn/ ring brings back the last tunnel used: warp | proton
++            property bool trayOpen: false  // noah: bar's apps part expanded — tray icons of background apps (Slack, Discord…) shown above its arrow
+             property bool clipRaw: false   // noah: clip/ image preview in original colours instead of dots (Ctrl+O / click)
+         }
+     }
+@@ -110,7 +111,7 @@ Singleton {
+     // секции deck
+     readonly property var decks: ["clock", "weather", "perf", "net", "media"]
+     // трей бара
+-    readonly property var bars: ["layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power"]
++    readonly property var bars: ["apps", "layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power"]
+ 
+     // ---- вид всего, что вне шелла. Зовёт только shell.qml: на старте и при смене темы ----
+     // hypr наследует demonshot: монитор, ввод, простой, ночник и движение ставит его же Rules (shell.qml), анимации — из
+diff --git a/config/quickshell/glyph/bar/Bar.qml b/config/quickshell/glyph/bar/Bar.qml
+index 9b8e66d..a990550 100644
+--- a/config/quickshell/glyph/bar/Bar.qml
++++ b/config/quickshell/glyph/bar/Bar.qml
+@@ -3,8 +3,10 @@ import Quickshell
+ import Quickshell.Bluetooth
+ import Quickshell.Hyprland
+ import Quickshell.Networking
++import Quickshell.Services.SystemTray
+ import Quickshell.Services.UPower
+ import Quickshell.Wayland
++import Quickshell.Widgets
+ import qs
+ import qs.components
+ import qs.settings
+@@ -154,7 +156,7 @@ PanelWindow {
+                     Loader {
+                         id: part
+                         required property string modelData
+-                        readonly property bool quick: modelData !== "mode" && modelData !== "power"
++                        readonly property bool quick: modelData !== "mode" && modelData !== "power" && modelData !== "apps"
+                         anchors.horizontalCenter: parent.horizontalCenter
+                         sourceComponent: root.parts[modelData] ?? null
+                         visible: !!sourceComponent && (modelData !== "battery" || root.bat.isLaptopBattery)
+@@ -166,7 +168,71 @@ PanelWindow {
+         }
+     }
+ 
+-    readonly property var parts: ({ layout: layoutC, wifi: wifiC, bluetooth: btC, sound: soundC, notes: notesC, battery: batC, mode: modeC, power: powerC })
++    readonly property var parts: ({ apps: appsC, layout: layoutC, wifi: wifiC, bluetooth: btC, sound: soundC, notes: notesC, battery: batC, mode: modeC, power: powerC })
++    // noah: apps — the system tray (StatusNotifierItem) behind an arrow. Click the arrow: the icons of background apps
++    // (Slack, Discord, Spotify…) stack above it in their own colours, so their badges show; Theme.state.trayOpen keeps it.
++    // Left click — the app's window, right — its menu, middle — its secondary action. Folded, a red dot on the arrow
++    // while an app asks for attention
++    Component {
++        id: appsC
++        Column {
++            id: apps
++            spacing: 14
++            readonly property var items: SystemTray.items.values
++            readonly property bool open: Theme.state.trayOpen
++            Repeater {
++                model: apps.open ? apps.items : []
++                Item {
++                    id: ti
++                    required property SystemTrayItem modelData
++                    anchors.horizontalCenter: parent.horizontalCenter
++                    width: 20
++                    height: 20
++                    IconImage {
++                        anchors.fill: parent
++                        source: ti.modelData.icon
++                        opacity: ti.modelData.status === Status.Passive && !tiHov.hovered ? 0.5 : 1
++                    }
++                    HoverHandler { id: tiHov; cursorShape: Qt.PointingHandCursor }
++                    TapHandler {
++                        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
++                        onTapped: (ev, button) => {
++                            const m = ti.modelData;
++                            if (button === Qt.MiddleButton) m.secondaryActivate();
++                            else if (button === Qt.RightButton || m.onlyMenu) {
++                                if (!m.hasMenu) return;
++                                const p = ti.mapToItem(null, ti.width + 14, 0);
++                                m.display(root, p.x, p.y);
++                            } else m.activate();
++                        }
++                    }
++                }
++            }
++            Item {
++                anchors.horizontalCenter: parent.horizontalCenter
++                width: 20
++                height: 20
++                visible: apps.items.length > 0 || apps.open
++                Icon {
++                    anchors.centerIn: parent
++                    text: apps.open ? "\u{F0140}" : "\u{F0143}"
++                    color: arrHov.hovered ? Theme.fg : Theme.grey
++                }
++                Rectangle {
++                    // Slack never sets NeedsAttention — only its pixmap and tooltip change ("No unread messages" when clear)
++                    visible: !apps.open && apps.items.some(i => i.status === Status.NeedsAttention
++                        || /unread|mention/i.test(i.tooltipTitle) && !/^no /i.test(i.tooltipTitle))
++                    anchors { right: parent.right; top: parent.top }
++                    width: 6
++                    height: 6
++                    radius: 3
++                    color: Theme.red
++                }
++                HoverHandler { id: arrHov; cursorShape: Qt.PointingHandCursor }
++                TapHandler { onTapped: Theme.state.trayOpen = !Theme.state.trayOpen }
++            }
++        }
++    }
+     Component { id: layoutC; Lb { text: Sys.layout; px: 10 } }
+     Component {
+         id: wifiC
+diff --git a/config/quickshell/glyph/prefs/Prefs.qml b/config/quickshell/glyph/prefs/Prefs.qml
+index 327dbfc..1937524 100644
+--- a/config/quickshell/glyph/prefs/Prefs.qml
++++ b/config/quickshell/glyph/prefs/Prefs.qml
+@@ -29,7 +29,7 @@ PanelWindow {
+         weather: "\u{F0595}", calendar: "\u{F00ED}", cpu: "\u{F061A}", ram: "\u{F035B}", gpu: "\u{F08AE}", disk: "\u{F02CA}",
+         battery: "\u{F0079}", buds: "\u{F02CB}", player: "\u{F040A}", system: "\u{F0128}", cat: "\u{F011B}", cava: "\u{F0EA2}",
+         clock: "\u{F0150}", perf: "\u{F04C5}", net: "\u{F05A9}", media: "\u{F075A}",
+-        layout: "\u{F030C}", wifi: "\u{F05A9}", bluetooth: "\u{F00AF}", sound: "\u{F057E}", notes: "\u{F009A}",
++        apps: "\u{F0143}", layout: "\u{F030C}", wifi: "\u{F05A9}", bluetooth: "\u{F00AF}", sound: "\u{F057E}", notes: "\u{F009A}",
+         mode: "\u{F04C5}", power: "\u{F0425}"
+     })
+     // круглые виджеты дома, остальные — квадрат 40. ponytail: ram/gpu/disk/battery — догадка (кольца); решит Home — поправить
+-- 
+2.55.0
+

@@ -1,0 +1,80 @@
+From 4c8a3f2d8d503b77efab438facb8c13937c47c7a Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Wed, 28 Oct 2026 16:26:41 +0530
+Subject: [PATCH] noah: tray menu fades in from the bar like the battery card;
+ Hyprland's layer slide off for glyph-traymenu
+
+---
+ config/hypr/hyprland/rules.lua      |  2 +-
+ config/quickshell/glyph/bar/Bar.qml | 18 +++++++++++++-----
+ 2 files changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/config/hypr/hyprland/rules.lua b/config/hypr/hyprland/rules.lua
+index 78870b3..63de3de 100644
+--- a/config/hypr/hyprland/rules.lua
++++ b/config/hypr/hyprland/rules.lua
+@@ -136,4 +136,4 @@ hl.layer_rule({ match = { namespace = "demonshot-.*" }, no_anim = true })
+ -- glyph: полосы-OSD, остров, быстрые настройки и свои модули рисуют появление сами — компоновщик не мешает (и не тормозит OSD);
+ -- меню питания своей анимации нет — мягкий fade
+ hl.layer_rule({ match = { namespace = "glyph-power" }, animation = "fade" })
+-hl.layer_rule({ match = { namespace = "glyph-(launcher|edge|island|buds|quick|home|bar|caffeine|shot|clip|charms|vpn|deck|prefs|hot|cal|wall|back)" }, no_anim = true })
++hl.layer_rule({ match = { namespace = "glyph-(launcher|edge|island|buds|quick|home|bar|caffeine|shot|clip|charms|vpn|deck|prefs|hot|cal|wall|back|traymenu)" }, no_anim = true })
+diff --git a/config/quickshell/glyph/bar/Bar.qml b/config/quickshell/glyph/bar/Bar.qml
+index 4458ab6..ba2d0b2 100644
+--- a/config/quickshell/glyph/bar/Bar.qml
++++ b/config/quickshell/glyph/bar/Bar.qml
+@@ -455,15 +455,17 @@ PanelWindow {
+     // shell doesn't run in, so the app's dbusmenu is drawn here as a Glyph card beside the icon: its entries (submenus
+     // open in place, ‹ back), the app's own quit/exit dropped, and our QUIT last — TERMs the app (Sys.quitTray).
+     // Click outside or Esc — close ----
+-    property SystemTrayItem menuItem: null
++    property SystemTrayItem menuItem: null // stays set while the card fades out
++    property bool menuOpen: false
+     property real menuY: 0
+     property var menuStack: []
+     function trayMenu(m, it) {
+         menuStack = [];
+         menuY = it.mapToItem(pill, 0, 0).y - 18;
+         menuItem = m;
++        menuOpen = true;
+     }
+-    function closeMenu() { menuItem = null; }
++    function closeMenu() { menuOpen = false; }
+     function quitEntry(e) { return /^(quit|exit)\b/i.test(e.text); }
+ 
+     QsMenuOpener {
+@@ -475,15 +477,18 @@ PanelWindow {
+     PanelWindow {
+         id: trayPop
+         screen: root.screen
+-        visible: root.menuItem !== null
++        // fades in from the bar like the battery card (pop); Hyprland's own layer slide is off (glyph-traymenu, rules.lua)
++        property real t: root.menuOpen ? 1 : 0
++        Behavior on t { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
++        visible: t > 0
+         anchors { left: true; right: true; top: true; bottom: true }
+         exclusionMode: ExclusionMode.Ignore
+         color: "transparent"
+         WlrLayershell.layer: WlrLayer.Overlay
+-        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
++        WlrLayershell.keyboardFocus: root.menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+         WlrLayershell.namespace: "glyph-traymenu"
+ 
+-        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onClicked: root.closeMenu() }
++        MouseArea { anchors.fill: parent; enabled: root.menuOpen; acceptedButtons: Qt.AllButtons; onClicked: root.closeMenu() }
+ 
+         Stage {
+             Rectangle {
+@@ -496,6 +501,9 @@ PanelWindow {
+                 radius: 26
+                 color: Theme.s1
+                 border { width: 1; color: Theme.s2 }
++                opacity: trayPop.t
++                transform: Translate { x: -16 * (1 - trayPop.t) }
++                enabled: root.menuOpen
+                 focus: true
+                 Keys.onEscapePressed: root.closeMenu()
+                 MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons } // clicks between rows stay in the card
+-- 
+2.55.0
+

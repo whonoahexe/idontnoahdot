@@ -42,6 +42,10 @@ dofile(end4hypr .. "/monitors.lua")
 -- Glyph tags kitty opaque with the games and creative apps; let the terminal go see-through when unfocused too
 hl.window_rule({ match = { class = "kitty" }, opaque = false })
 
+-- US layout only (Glyph sets us,ru). The Alt+Shift toggle is off via the shell: its Rules.input()
+-- re-applies kb_options on every reload, so it's "layout switch: off" in prefs (kbSwitch 3)
+hl.config({ input = { kb_layout = "us", kb_options = "" } })
+
 -- Variable refresh rate only for fullscreen apps (games); LG ultrawide does 48-160 Hz
 hl.config({ misc = { vrr = 2 } })
 

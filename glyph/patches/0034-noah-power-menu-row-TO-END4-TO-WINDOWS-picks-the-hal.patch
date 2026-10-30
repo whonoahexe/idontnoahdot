@@ -1,0 +1,130 @@
+From fde038ed885da6edcb531151bd9e20fab996ba02 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Fri, 30 Oct 2026 13:40:39 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20power=20menu=20row=20TO=20END4=20/=20TO?=
+ =?UTF-8?q?=20WINDOWS=20=E2=80=94=20=E2=86=90=E2=86=92=20picks=20the=20hal?=
+ =?UTF-8?q?f,=20only=20the=20chosen=20one=20grows=20(as=20far=20as=20clear?=
+ =?UTF-8?q?s=20the=20ring);=20to-windows=20sets=20BootNext=20to=20the=20Wi?=
+ =?UTF-8?q?ndows=20ESP=20and=20reboots?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/power/Power.qml | 62 ++++++++++++++++++++-----
+ 1 file changed, 51 insertions(+), 11 deletions(-)
+
+diff --git a/config/quickshell/glyph/power/Power.qml b/config/quickshell/glyph/power/Power.qml
+index dc2a015..3b88a7d 100644
+--- a/config/quickshell/glyph/power/Power.qml
++++ b/config/quickshell/glyph/power/Power.qml
+@@ -12,25 +12,39 @@ PanelWindow {
+     id: root
+ 
+     property int sel: 2
++    property int side: 0 // noah: which half of a paired row (TO END4 / TO WINDOWS)
+     readonly property var items: [
+         ["LOCK", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.config/quickshell/rice/rice", "lock"])],
+         ["SLEEP", () => Quickshell.execDetached(["systemctl", "suspend"])],
+         ["SHUT DOWN", () => Quickshell.execDetached(["systemctl", "poweroff"])],
+         ["REBOOT", () => Quickshell.execDetached(["systemctl", "reboot"])],
+         ["LOG OUT", () => Hyprland.dispatch("hl.dsp.exit()")],
+-        // noah: ~/.local/bin/rice-switch swaps back to the end4 setup and logs out
+-        ["TO END4", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rice-switch", "end4", "--logout"])]
++        // noah: one row, ←→ picks the half. ~/.local/bin/rice-switch swaps back to the end4 setup and logs out;
++        // ~/.local/bin/to-windows sets the firmware's one-shot BootNext to Windows and reboots
++        [["TO END4", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rice-switch", "end4", "--logout"])],
++         ["TO WINDOWS", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/to-windows"])]]
+     ]
++    readonly property bool paired: Array.isArray(items[sel][0])
++    // noah: at 168 a paired row would run into the uptime ring, so its chosen half grows only as far as fits
++    // (900 = from the words to the ring with a margin; the other half and the slash stay at 66)
++    TextMetrics { id: big; font { family: Theme.dot; pixelSize: 168; weight: Font.Black } }
++    TextMetrics { id: small; font { family: Theme.dot; pixelSize: 66; weight: Font.Black } }
++    function fit(row, half) {
++        big.text = row[half][0];
++        small.text = row[1 - half][0] + "/";
++        return Math.min(168, Math.floor(168 * (900 - small.width - 60) / big.width));
++    }
+ 
+     function open() {
+         sel = 2;
++        side = 0;
+         SysStats.sample(); // свежий аптайм
+         visible = true;
+     }
+     function close() { visible = false; }
+     function accept() {
+         close();
+-        items[sel][1]();
++        (paired ? items[sel][side] : items[sel])[1]();
+     }
+ 
+     visible: false
+@@ -53,6 +67,8 @@ PanelWindow {
+         Keys.onPressed: e => {
+             if (e.key === Qt.Key_Up || e.key === Qt.Key_K) root.sel = (root.sel + root.items.length - 1) % root.items.length;
+             else if (e.key === Qt.Key_Down || e.key === Qt.Key_J || e.key === Qt.Key_Tab) root.sel = (root.sel + 1) % root.items.length;
++            else if (root.paired && (e.key === Qt.Key_Left || e.key === Qt.Key_H)) root.side = 0;
++            else if (root.paired && (e.key === Qt.Key_Right || e.key === Qt.Key_L)) root.side = 1;
+             else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) root.accept();
+             else if (e.key === Qt.Key_Escape) root.close();
+             else return;
+@@ -79,15 +95,38 @@ PanelWindow {
+                         radius: 15
+                         color: Theme.red
+                     }
+-                    Num {
+-                        text: it.modelData[0]
+-                        font.pixelSize: it.on ? 168 : 66
+-                        color: it.on ? Theme.fg : Theme.mute
+-                        Behavior on font.pixelSize { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+-                        Behavior on color { ColorAnimation { duration: Theme.t } }
++                    // noah: a row is one word or a pair of [label, action]; in a pair only the chosen half lights up
++                    Row {
++                        spacing: 20
++                        Repeater {
++                            model: Array.isArray(it.modelData[0]) ? it.modelData : [it.modelData]
++                            Row {
++                                id: half
++                                anchors.bottom: parent.bottom
++                                required property var modelData
++                                required property int index
++                                readonly property bool lit: it.on && (!Array.isArray(it.modelData[0]) || root.side === index)
++                                spacing: 20
++                                Num {
++                                    anchors.baseline: word.baseline
++                                    visible: half.index > 0
++                                    text: "/"
++                                    font.pixelSize: 66
++                                    color: Theme.mute
++                                }
++                                Num {
++                                    id: word
++                                    text: half.modelData[0]
++                                    font.pixelSize: !half.lit ? 66 : Array.isArray(it.modelData[0]) ? root.fit(it.modelData, half.index) : 168
++                                    color: half.lit ? Theme.fg : Theme.mute
++                                    Behavior on font.pixelSize { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
++                                    Behavior on color { ColorAnimation { duration: Theme.t } }
++                                }
++                                HoverHandler { onHoveredChanged: if (hovered) { root.sel = it.index; root.side = half.index; } }
++                                TapHandler { onTapped: { root.sel = it.index; root.side = half.index; root.accept(); } }
++                            }
++                        }
+                     }
+-                    HoverHandler { onHoveredChanged: if (hovered) root.sel = it.index }
+-                    TapHandler { onTapped: { root.sel = it.index; root.accept(); } }
+                 }
+             }
+         }
+@@ -121,6 +160,7 @@ PanelWindow {
+             anchors { bottom: parent.bottom; bottomMargin: 70 }
+             spacing: 34
+             Lb { text: "↑↓ select" }
++            Lb { visible: root.paired; text: "←→ end4 / windows" }
+             Lb { text: "↵ confirm" }
+             Lb { text: "esc cancel" }
+         }
+-- 
+2.55.0
+

@@ -1,0 +1,3 @@
+# /usr/local/bin/reboot-to-windows: one-shot BootNext to Windows Boot Manager, then reboot
+# (end4's Restart to Windows, Glyph's TO WINDOWS)
+noah ALL=(root) NOPASSWD: /usr/local/bin/reboot-to-windows

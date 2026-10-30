@@ -11,7 +11,11 @@ Everything Glyph-only is in this folder. Nothing here is needed by end4.
   - **Wallpapers**: the picker reads one folder down; a wallpaper folder's `scene/Scene.qml` plays as a live wallpaper (colour look, only on the home screen and on AC); options in the picker for **HOME** default / clear (bare widgets and bar, like the picker), **MOTION** still / live, **WINDOWS** solid / glass (unfocused windows 90% opaque + 5% dim, frosted by the blur)
   - home widgets **by the clock or against the right edge** (Prefs → Home → place)
   - bar margins match Hyprland's real gaps; clipboard image preview toggles dots ↔ original (Ctrl+O)
-  - GTK4 rules for Apostrophe's editor; faster animations; threaded render loop (smooth at 160 Hz); Brave / Strata apps, keybinds, power-menu entry back to end4
+  - **Bar tray** behind an arrow (Glyph had no StatusNotifierWatcher, so tray apps showed nowhere): icons in their own colours, a red dot while one wants attention; right-click opens the app's menu as a Glyph card, with a QUIT that ends the app
+  - **Power menu** (Super+Esc) ends with one row **TO END4 / TO WINDOWS** (←→ picks): back to end4 via `rice-switch`, or a one-shot reboot into Windows via `reboot-to-windows` (the root `system/`)
+  - Strata in Glyph type and shape, framed like Thunar, including its file chooser
+  - keyboard layout switch can be **off** (Prefs; `user.lua` keeps US only)
+  - GTK4 rules for Apostrophe's editor; faster animations; threaded render loop (smooth at 160 Hz); Brave / Strata apps, keybinds
 - `home/` — mirrors `$HOME`; files Glyph's repo doesn't carry:
   - `.local/share/glyph/config/hypr/user.lua` — machine overrides (gitignored by Glyph): NVIDIA env, monitor layout shared with end4, VRR, mouse colour, animation speeds, kitty see-through when unfocused
   - `.local/state/rice/glyph.json` + `.config/demonshot/rules.json` — Glyph's settings (wallpaper, looks, widgets, gaps, idle…)

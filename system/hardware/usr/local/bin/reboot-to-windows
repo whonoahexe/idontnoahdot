@@ -1,0 +1,22 @@
+#!/bin/bash
+set -euo pipefail
+
+output=$(efibootmgr -v)
+boot_order=$(echo "$output" | grep '^BootOrder:' | cut -d' ' -f2 | tr ',' ' ')
+
+entry=""
+for id in $boot_order; do
+    if echo "$output" | grep "^Boot${id}" | grep -qi "Windows Boot Manager"; then
+        entry="$id"
+        break
+    fi
+done
+
+if [[ -z "$entry" ]]; then
+    notify-send -u critical "Reboot to Windows" "Could not find a Windows Boot Manager UEFI entry" 2>/dev/null || true
+    echo "Windows Boot Manager entry not found" >&2
+    exit 1
+fi
+
+efibootmgr --bootnext "$entry" >/dev/null
+systemctl reboot

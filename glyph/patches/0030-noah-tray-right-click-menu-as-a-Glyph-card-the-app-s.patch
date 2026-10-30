@@ -1,0 +1,226 @@
+From 963304ace0c526bc5ce1434cf3134bda5b09a471 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Wed, 28 Oct 2026 16:24:09 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20tray=20right-click=20menu=20as=20a=20Gl?=
+ =?UTF-8?q?yph=20card=20=E2=80=94=20the=20app's=20dbusmenu=20entries=20(su?=
+ =?UTF-8?q?bmenus=20in=20place)=20+=20QUIT=20that=20TERMs=20the=20app's=20?=
+ =?UTF-8?q?process;=20platform=20menus=20need=20QApplication=20mode,=20whi?=
+ =?UTF-8?q?ch=20the=20shell=20doesn't=20run=20in?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/Sys.qml     |  10 ++
+ config/quickshell/glyph/bar/Bar.qml | 162 ++++++++++++++++++++++++++--
+ 2 files changed, 166 insertions(+), 6 deletions(-)
+
+diff --git a/config/quickshell/glyph/Sys.qml b/config/quickshell/glyph/Sys.qml
+index 10c05a6..88445b5 100644
+--- a/config/quickshell/glyph/Sys.qml
++++ b/config/quickshell/glyph/Sys.qml
+@@ -82,6 +82,16 @@ Singleton {
+     function repoll() { poll.running = true; } // noah: vpn/ after its own connect/disconnect
+ 
+     function sh(c) { Quickshell.execDetached(["sh", "-c", c]); }
++    // noah: quit a tray app — SystemTrayItem has no pid, so find the watcher entry whose Id matches and TERM the
++    // process owning its bus name ("svc/path", or bare "svc" for the default /StatusNotifierItem)
++    function quitTray(id) {
++        Quickshell.execDetached(["sh", "-c", `
++            for s in $(busctl --user get-property org.kde.StatusNotifierWatcher /StatusNotifierWatcher org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems | grep -o '"[^"]*"' | tr -d '"'); do
++                svc=\${s%%/*}; path=/\${s#*/}; [ "$path" = "/$s" ] && path=/StatusNotifierItem
++                [ "$(busctl --user get-property "$svc" "$path" org.kde.StatusNotifierItem Id)" = "s \\"$1\\"" ] || continue
++                kill "$(busctl --user call org.freedesktop.DBus / org.freedesktop.DBus GetConnectionUnixProcessID s "$svc" | cut -d' ' -f2)"
++            done`, "sh", id]);
++    }
+     // настройки записи из Theme.state (quick/Rec) → флаги gpu-screen-recorder; их же берёт скриншотилка
+     readonly property var recFps: [30, 60, 120]
+     function recArgs() {
+diff --git a/config/quickshell/glyph/bar/Bar.qml b/config/quickshell/glyph/bar/Bar.qml
+index a990550..c31617b 100644
+--- a/config/quickshell/glyph/bar/Bar.qml
++++ b/config/quickshell/glyph/bar/Bar.qml
+@@ -171,7 +171,7 @@ PanelWindow {
+     readonly property var parts: ({ apps: appsC, layout: layoutC, wifi: wifiC, bluetooth: btC, sound: soundC, notes: notesC, battery: batC, mode: modeC, power: powerC })
+     // noah: apps — the system tray (StatusNotifierItem) behind an arrow. Click the arrow: the icons of background apps
+     // (Slack, Discord, Spotify…) stack above it in their own colours, so their badges show; Theme.state.trayOpen keeps it.
+-    // Left click — the app's window, right — its menu, middle — its secondary action. Folded, a red dot on the arrow
++    // Left click — the app's window, right — its menu (trayPop below), middle — its secondary action. Folded, a red dot on the arrow
+     // while an app asks for attention
+     Component {
+         id: appsC
+@@ -199,11 +199,8 @@ PanelWindow {
+                         onTapped: (ev, button) => {
+                             const m = ti.modelData;
+                             if (button === Qt.MiddleButton) m.secondaryActivate();
+-                            else if (button === Qt.RightButton || m.onlyMenu) {
+-                                if (!m.hasMenu) return;
+-                                const p = ti.mapToItem(null, ti.width + 14, 0);
+-                                m.display(root, p.x, p.y);
+-                            } else m.activate();
++                            else if (button === Qt.RightButton || m.onlyMenu) root.trayMenu(m, ti);
++                            else m.activate();
+                         }
+                     }
+                 }
+@@ -453,4 +450,157 @@ PanelWindow {
+             }
+         }
+     }
++
++    // ---- noah: tray menu — right click on a tray icon. Platform menus (item.display) need QApplication mode, which the
++    // shell doesn't run in, so the app's dbusmenu is drawn here as a Glyph card beside the icon: its entries (submenus
++    // open in place, ‹ back), the app's own quit/exit dropped, and our QUIT last — TERMs the app (Sys.quitTray).
++    // Click outside or Esc — close ----
++    property SystemTrayItem menuItem: null
++    property real menuY: 0
++    property var menuStack: []
++    function trayMenu(m, it) {
++        menuStack = [];
++        menuY = it.mapToItem(pill, 0, 0).y - 18;
++        menuItem = m;
++    }
++    function closeMenu() { menuItem = null; }
++    function quitEntry(e) { return /^(quit|exit)\b/i.test(e.text); }
++
++    QsMenuOpener {
++        id: opener
++        menu: root.menuStack.length ? root.menuStack[root.menuStack.length - 1] : root.menuItem?.hasMenu ? root.menuItem.menu : null
++    }
++
++    PopupWindow {
++        id: trayPop
++        visible: root.menuItem !== null
++        anchor.item: pill
++        anchor.rect: Qt.rect(pill.width + 14, root.menuY, 1, 1)
++        anchor.edges: Edges.Top | Edges.Left
++        anchor.gravity: Edges.Bottom | Edges.Right
++        implicitWidth: Math.ceil(300 * Theme.s)
++        implicitHeight: Math.ceil(menuCard.height * Theme.s)
++        color: "transparent"
++
++        HyprlandFocusGrab {
++            active: trayPop.visible
++            windows: [trayPop]
++            onCleared: root.closeMenu()
++        }
++
++        Stage {
++            Rectangle {
++                id: menuCard
++                width: 300
++                height: menuCol.height + 28
++                radius: 26
++                color: Theme.s1
++                border { width: 1; color: Theme.s2 }
++                focus: true
++                Keys.onEscapePressed: root.closeMenu()
++
++                Column {
++                    id: menuCol
++                    x: 14
++                    y: 14
++                    width: parent.width - 28
++
++                    Lb {
++                        x: 12
++                        width: parent.width - 24
++                        topPadding: 6
++                        bottomPadding: 10
++                        elide: Text.ElideRight
++                        text: root.menuItem ? root.menuItem.tooltipTitle || root.menuItem.title || root.menuItem.id : ""
++                    }
++                    MenuRow {
++                        visible: root.menuStack.length > 0
++                        label: "‹ back"
++                        onPicked: root.menuStack = root.menuStack.slice(0, -1)
++                    }
++                    Repeater {
++                        model: opener.children
++                        Item {
++                            id: en
++                            required property QsMenuEntry modelData
++                            required property int index
++                            // the app's quit/exit, and separators left with nothing below them once it's gone
++                            readonly property bool own: root.menuStack.length === 0 && (root.quitEntry(modelData)
++                                || modelData.isSeparator && opener.children.values.slice(index + 1).every(e => e.isSeparator || root.quitEntry(e)))
++                            width: menuCol.width
++                            height: own ? 0 : modelData.isSeparator ? 13 : row.height
++                            visible: !own
++                            Rectangle {
++                                visible: en.modelData.isSeparator
++                                x: 12
++                                width: parent.width - 24
++                                height: 1
++                                anchors.verticalCenter: parent.verticalCenter
++                                color: Theme.s3
++                            }
++                            MenuRow {
++                                id: row
++                                visible: !en.modelData.isSeparator
++                                label: en.modelData.text
++                                active: en.modelData.enabled
++                                checked: en.modelData.buttonType !== QsMenuButtonType.None
++                                    ? en.modelData.checkState === Qt.Checked : undefined
++                                more: en.modelData.hasChildren
++                                onPicked: {
++                                    if (en.modelData.hasChildren) { root.menuStack = [...root.menuStack, en.modelData]; return; }
++                                    en.modelData.triggered();
++                                    root.closeMenu();
++                                }
++                            }
++                        }
++                    }
++                    Item {
++                        visible: root.menuStack.length === 0 && opener.children.values.length > 0
++                        width: parent.width
++                        height: 13
++                        Rectangle { x: 12; width: parent.width - 24; height: 1; anchors.verticalCenter: parent.verticalCenter; color: Theme.s3 }
++                    }
++                    MenuRow {
++                        visible: root.menuStack.length === 0
++                        label: "quit"
++                        danger: true
++                        onPicked: { Sys.quitTray(root.menuItem.id); root.closeMenu(); }
++                    }
++                }
++            }
++        }
++    }
++
++    component MenuRow: Rectangle {
++        id: mr
++        property string label
++        property bool active: true
++        property var checked: undefined // undefined — not a toggle
++        property bool more: false
++        property bool danger: false
++        signal picked
++        width: parent.width
++        height: 40
++        radius: 20
++        color: mrHov.hovered && active ? Theme.s2 : "transparent"
++        Text {
++            x: 14
++            anchors.verticalCenter: parent.verticalCenter
++            width: parent.width - 28 - (mrMark.visible ? 24 : 0)
++            elide: Text.ElideRight
++            text: mr.label
++            font { family: mr.danger ? Theme.mono : Theme.ui; pixelSize: mr.danger ? 12 : 15; letterSpacing: mr.danger ? 1.7 : 0; capitalization: mr.danger ? Font.AllUppercase : Font.MixedCase }
++            color: !mr.active ? Theme.mute : mr.danger && mrHov.hovered ? Theme.red : Theme.fg
++        }
++        Icon {
++            id: mrMark
++            visible: mr.more || mr.checked !== undefined
++            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
++            font.pixelSize: 16
++            text: mr.more ? "\u{F0142}" : mr.checked ? "\u{F012C}" : ""
++            color: Theme.grey
++        }
++        HoverHandler { id: mrHov; enabled: mr.active; cursorShape: Qt.PointingHandCursor }
++        TapHandler { enabled: mr.active; onTapped: mr.picked() }
++    }
+ }
+-- 
+2.55.0
+

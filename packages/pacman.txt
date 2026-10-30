@@ -7,6 +7,7 @@ chromium
 direnv
 discord
 docker
+docker-buildx
 docker-compose
 easyeffects
 ethtool

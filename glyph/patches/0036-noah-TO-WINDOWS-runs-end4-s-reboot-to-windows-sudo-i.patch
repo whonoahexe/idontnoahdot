@@ -1,0 +1,29 @@
+From 874416f1641d3afb23797dd777acaf7e40f375d6 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Fri, 30 Oct 2026 13:49:30 +0530
+Subject: [PATCH] noah: TO WINDOWS runs end4's reboot-to-windows (sudo) instead
+ of a second script of its own
+
+---
+ config/quickshell/glyph/power/Power.qml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/config/quickshell/glyph/power/Power.qml b/config/quickshell/glyph/power/Power.qml
+index 9d0fdd2..523526e 100644
+--- a/config/quickshell/glyph/power/Power.qml
++++ b/config/quickshell/glyph/power/Power.qml
+@@ -20,9 +20,9 @@ PanelWindow {
+         ["REBOOT", () => Quickshell.execDetached(["systemctl", "reboot"])],
+         ["LOG OUT", () => Hyprland.dispatch("hl.dsp.exit()")],
+         // noah: one row, ←→ picks the half. ~/.local/bin/rice-switch swaps back to the end4 setup and logs out;
+-        // ~/.local/bin/to-windows sets the firmware's one-shot BootNext to Windows and reboots
++        // /usr/local/bin/reboot-to-windows (end4's Restart to Windows too) sets the firmware's one-shot BootNext to Windows and reboots
+         [["TO END4", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rice-switch", "end4", "--logout"])],
+-         ["TO WINDOWS", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/to-windows"])]]
++         ["TO WINDOWS", () => Quickshell.execDetached(["sudo", "-n", "/usr/local/bin/reboot-to-windows"])]]
+     ]
+     readonly property bool paired: Array.isArray(items[sel][0])
+     // noah: at 168 a paired row would run into the uptime ring, so its chosen half grows only as far as fits
+-- 
+2.55.0
+
