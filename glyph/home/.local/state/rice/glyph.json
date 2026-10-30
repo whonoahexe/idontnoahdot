@@ -36,7 +36,7 @@
     "recFps": 60,
     "recQuality": 2,
     "rounding": 22,
-    "trayOpen": false,
+    "trayOpen": true,
     "unread": 0,
     "vpnLast": "proton",
     "wall": "",

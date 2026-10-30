@@ -1,0 +1,74 @@
+From 782ad9b8d2c03b97eb9afb9c04fad6fef78cdff2 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Fri, 30 Oct 2026 14:06:04 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20tray=20icons=20all=20drawn=2018=20px=20?=
+ =?UTF-8?q?and=20centred=20=E2=80=94=20the=20shell=20measures=20each=20ico?=
+ =?UTF-8?q?n's=20drawn=20part=20(apps'=20pixmaps=20fill=20their=20canvas,?=
+ =?UTF-8?q?=20Papirus=20panel=20icons=20like=20Spotify's=20are=2016=20in?=
+ =?UTF-8?q?=2022)=20and=20scales=20it=20to=20fit?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/bar/Bar.qml | 41 ++++++++++++++++++++++++++++-
+ 1 file changed, 40 insertions(+), 1 deletion(-)
+
+diff --git a/config/quickshell/glyph/bar/Bar.qml b/config/quickshell/glyph/bar/Bar.qml
+index ba2d0b2..e62d757 100644
+--- a/config/quickshell/glyph/bar/Bar.qml
++++ b/config/quickshell/glyph/bar/Bar.qml
+@@ -188,10 +188,49 @@ PanelWindow {
+                     anchors.horizontalCenter: parent.horizontalCenter
+                     width: 20
+                     height: 20
+-                    IconImage {
++                    // every icon's drawing the same 18 px, centred: apps' own pixmaps (Discord, Slack) fill their canvas,
++                    // theme tray icons (Papirus panel: Spotify) are a 16 px shape in 22. probe finds the drawn part, fit/dx/dy
++                    // scale and move it into place
++                    property real fit: 1
++                    property real dx: 0
++                    property real dy: 0
++                    Image {
+                         anchors.fill: parent
+                         source: ti.modelData.icon
++                        sourceSize: Qt.size(64, 64)
++                        fillMode: Image.PreserveAspectFit
++                        mipmap: true
+                         opacity: ti.modelData.status === Status.Passive && !tiHov.hovered ? 0.5 : 1
++                        transform: [
++                            Translate { x: ti.dx; y: ti.dy },
++                            Scale { origin { x: 10; y: 10 } xScale: ti.fit; yScale: ti.fit }
++                        ]
++                    }
++                    Canvas {
++                        id: probe
++                        readonly property string src: ti.modelData.icon
++                        width: 64
++                        height: 64
++                        opacity: 0.001 // must be "visible" to paint; drawn nowhere you'd see
++                        onSrcChanged: if (isImageLoaded(src)) requestPaint(); else loadImage(src)
++                        onImageLoaded: requestPaint()
++                        Component.onCompleted: loadImage(src)
++                        onPaint: {
++                            const c = getContext("2d");
++                            c.clearRect(0, 0, 64, 64);
++                            if (!isImageLoaded(src)) return;
++                            c.drawImage(src, 0, 0, 64, 64);
++                            const d = c.getImageData(0, 0, 64, 64).data;
++                            let x0 = 64, y0 = 64, x1 = -1, y1 = -1;
++                            for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
++                                if (d[(y * 64 + x) * 4 + 3] < 40) continue;
++                                x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
++                            }
++                            if (x1 < 0) return;
++                            ti.fit = Math.min(2, 18 / 20 * 64 / Math.max(x1 - x0 + 1, y1 - y0 + 1));
++                            ti.dx = 10 - (x0 + x1 + 1) / 2 * 20 / 64;
++                            ti.dy = 10 - (y0 + y1 + 1) / 2 * 20 / 64;
++                        }
+                     }
+                     HoverHandler { id: tiHov; cursorShape: Qt.PointingHandCursor }
+                     TapHandler {
+-- 
+2.55.0
+
