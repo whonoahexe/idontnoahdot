@@ -1,0 +1,43 @@
+From 014849d9dbf97bc10b90c41fe0cf2743d3dd537b Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Fri, 30 Oct 2026 13:57:56 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20Prefs=20=E2=86=92=20Home=20place=20pick?=
+ =?UTF-8?q?er=20beside=20the=20grid,=20under=20the=20cell=20count=20?=
+ =?UTF-8?q?=E2=80=94=20under=20the=20tray=20the=20page=20grew=20into=20the?=
+ =?UTF-8?q?=20hints=20at=20the=20bottom?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/prefs/Prefs.qml | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/config/quickshell/glyph/prefs/Prefs.qml b/config/quickshell/glyph/prefs/Prefs.qml
+index 1937524..bd7698a 100644
+--- a/config/quickshell/glyph/prefs/Prefs.qml
++++ b/config/quickshell/glyph/prefs/Prefs.qml
+@@ -271,7 +271,10 @@ PanelWindow {
+                         elide: Text.ElideRight
+                         text: !home.cur_ ? "empty · ↵ adds one" : `${home.cur_.id} · ${home.cur_.span} cell${home.cur_.span > 1 ? "s" : ""}${home.cur_.fits ? "" : " · off grid"}`
+                     }
+-                    Item { width: 1; height: 40 }
++                    // noah: where the grid sits on the home screen. Here, not under the tray: there the page grew into the hints at the bottom
++                    Item { width: 1; height: 28 }
++                    Pick { label: "place"; opts: ["by clock", "right"]; cur: Theme.state.bentoRight ? 1 : 0; onPicked: i => Theme.state.bentoRight = i === 1 }
++                    Item { width: 1; height: 28 }
+                     Lb { text: home.off.length ? `off grid · ${home.off.length}` : "everything fits" }
+                     Flow {
+                         width: parent.width
+@@ -292,8 +295,6 @@ PanelWindow {
+                 widths: Theme.kinds
+                 onToggled: key => home.cur = root.flip("widgets", key, home.cur)
+             }
+-            // noah: where the grid sits on the home screen
+-            Pick { label: "place"; opts: ["by clock", "right"]; cur: Theme.state.bentoRight ? 1 : 0; onPicked: i => Theme.state.bentoRight = i === 1 }
+         }
+ 
+         // ---- DECK: экран, снизу по центру — deck, справа — быстрые настройки; оба вылезают по наведению на свой край.
+-- 
+2.55.0
+
