@@ -1,4 +1,5 @@
 {
+    "audioAuto": true,
     "bar": [
         "apps",
         "wifi",
@@ -36,7 +37,7 @@
     "recQuality": 2,
     "rounding": 22,
     "trayOpen": false,
-    "unread": 0,
+    "unread": 1,
     "vpnLast": "proton",
     "wall": "",
     "wallBright": 100,

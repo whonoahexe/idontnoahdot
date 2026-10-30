@@ -1,0 +1,265 @@
+From 2503473cda36ae94d38aee81530f9222e82bbd90 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Fri, 30 Oct 2026 13:55:10 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20sound=20devices=20in=20quick=20settings?=
+ =?UTF-8?q?=20=E2=80=94=20right=20click=20the=20volume=20slider=20for=20ou?=
+ =?UTF-8?q?tputs,=20the=20mic=20tile=20for=20inputs;=20auto:=20a=20newly?=
+ =?UTF-8?q?=20plugged/connected=20device=20becomes=20the=20default=20(not?=
+ =?UTF-8?q?=20HDMI,=20not=20a=20profile=20flip,=20not=20a=20burst),=20with?=
+ =?UTF-8?q?=20a=20notification?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/Sys.qml         | 51 +++++++++++++
+ config/quickshell/glyph/Theme.qml       |  1 +
+ config/quickshell/glyph/quick/Quick.qml | 16 ++--
+ config/quickshell/glyph/quick/Sound.qml | 99 +++++++++++++++++++++++++
+ 4 files changed, 162 insertions(+), 5 deletions(-)
+ create mode 100644 config/quickshell/glyph/quick/Sound.qml
+
+diff --git a/config/quickshell/glyph/Sys.qml b/config/quickshell/glyph/Sys.qml
+index 88445b5..e74f76a 100644
+--- a/config/quickshell/glyph/Sys.qml
++++ b/config/quickshell/glyph/Sys.qml
+@@ -31,6 +31,57 @@ Singleton {
+         sink.audio.muted = false;
+         sink.audio.volume = Math.max(0, Math.min(1, v));
+     }
++    // noah: devices for quick/Sound (right click on the volume slider / mic tile): real outputs and inputs, not app streams
++    readonly property var outs: Pipewire.nodes.values.filter(n => n.type === PwNodeType.AudioSink)
++    readonly property var ins: Pipewire.nodes.values.filter(n => n.type === PwNodeType.AudioSource)
++    function useDev(n) {
++        if (n.type === PwNodeType.AudioSink) Pipewire.preferredDefaultAudioSink = n;
++        else Pipewire.preferredDefaultAudioSource = n;
++    }
++    // noah: auto (Theme.state.audioAuto): a device that shows up — buds connect, a USB mic or headphones plug in — becomes
++    // the default. A device is its node name minus the profile (alsa_output.usb-X, bluez_output.<addr>), so a profile flip
++    // (buds into headset mode for the mic) isn't new, nor is one back within 5 s. HDMI/DP outputs are never picked on their own
++    // (a monitor without speakers). Arrivals settle for 1.5 s; two of a kind at once — PipeWire restarting, resume — none is
++    // picked, and for 3 s after start or after every device vanished nothing is
++    function devKey(n) { return n.name.replace(/\.[^.]*$/, ""); }
++    property var devSeen: ({})  // key → node class, present now
++    property var devGone: ({})  // key → ms it vanished
++    property var devNew: []     // nodes that showed up, waiting for devSettle
++    property real devQuiet: 0   // until then arrivals only get remembered
++    function devScan() {
++        if (!Pipewire.ready) return;
++        const now = {};
++        for (const n of [...outs, ...ins]) if (/^(alsa|bluez)_/.test(n.name)) now[devKey(n)] = n;
++        const t = Date.now();
++        if (!Object.keys(now).length) devQuiet = t + 3000;
++        for (const k in devSeen) if (!now[k]) devGone[k] = t;
++        for (const k in now) {
++            if (devSeen[k] || t < devQuiet || t - (devGone[k] ?? 0) < 5000) continue;
++            devNew.push(now[k]);
++            devSettle.restart();
++        }
++        devSeen = now;
++    }
++    Timer {
++        id: devSettle
++        interval: 1500
++        onTriggered: {
++            const fresh = root.devNew.filter(n => root.devSeen[root.devKey(n)] === n);
++            root.devNew = [];
++            if (!Theme.state.audioAuto) return;
++            for (const type of [PwNodeType.AudioSink, PwNodeType.AudioSource]) {
++                const one = fresh.filter(n => n.type === type);
++                if (one.length !== 1 || /hdmi|iec958|displayport/i.test(one[0].name)) continue;
++                root.useDev(one[0]);
++                Quickshell.execDetached(["notify-send", "-a", "sound", "-e", type === PwNodeType.AudioSink ? "Output" : "Input",
++                    one[0].description || one[0].nickname || one[0].name]);
++            }
++        }
++    }
++    Connections { target: Pipewire.nodes; function onValuesChanged() { root.devScan(); } }
++    Connections { target: Pipewire; function onReadyChanged() { root.devQuiet = Date.now() + 3000; root.devScan(); } }
++    Component.onCompleted: { devQuiet = Date.now() + 3000; devScan(); }
++
+     // микрофон кто-то слушает — центр знака в баре краснеет
+     PwNodeLinkTracker { id: micUse; node: root.mic }
+     readonly property bool live: rec || micUse.linkGroups.length > 0
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index 99f9be5..e3dcfca 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -102,6 +102,7 @@ Singleton {
+             property bool wallLive: true   // noah: a wallpaper folder's scene/Scene.qml plays over it (look: color)
+             property string vpnLast: "warp" // noah: vpn/ ring brings back the last tunnel used: warp | proton
+             property bool trayOpen: false  // noah: bar's apps part expanded — tray icons of background apps (Slack, Discord…) shown above its arrow
++            property bool audioAuto: true  // noah: a newly plugged/connected audio device becomes the default (Sys.devSettle)
+             property bool clipRaw: false   // noah: clip/ image preview in original colours instead of dots (Ctrl+O / click)
+         }
+     }
+diff --git a/config/quickshell/glyph/quick/Quick.qml b/config/quickshell/glyph/quick/Quick.qml
+index ce41cf6..33a04e2 100644
+--- a/config/quickshell/glyph/quick/Quick.qml
++++ b/config/quickshell/glyph/quick/Quick.qml
+@@ -30,6 +30,7 @@ PanelWindow {
+         open = true;
+     }
+     // открытый список: "wifi" | "bt" — под пилюлями (Picker), "rec" — под плитками (Rec), "" — ничего
++    // noah: "in" — inputs under the tiles, "out" — outputs under the volume slider (Sound)
+     property string pick: ""
+     onOpenChanged: if (open) Sys.earRun([]); else pick = ""
+     // курсор 500мс вне панели и полосы Hot — закрываем. seen: Hyprland не отдаёт курсор свежей поверхности, пока мышь не сдвинется —
+@@ -193,16 +194,18 @@ PanelWindow {
+                         Tile { icon: "\u{F0594}"; name: "night"; on: Sys.night; onClicked: Sys.toggleNight() }
+                         Tile { icon: "\u{F001D}"; name: "airplane"; on: Sys.air; onClicked: Sys.toggleAir() }
+                         Tile { icon: "\u{F0176}"; name: "caffeine"; on: Sys.caffeine; onClicked: Sys.caffeine = !Sys.caffeine }
+-                        Tile { icon: on ? "\u{F036C}" : "\u{F036D}"; name: "mic"; on: Sys.micOn; onClicked: Sys.toggleMic() }
++                        Tile { icon: on ? "\u{F036C}" : "\u{F036D}"; name: "mic"; on: Sys.micOn; picked: root.pick === "in"; onClicked: Sys.toggleMic(); onMenu: root.pick = picked ? "" : "in" }
+                         Tile { icon: "\u{F044A}"; name: "record"; on: Sys.rec; picked: root.pick === "rec"; onClicked: { root.close(); Sys.toggleRec(); } onMenu: root.pick = picked ? "" : "rec" }
+                         Tile { icon: "\u{F0483}"; name: "vpn"; on: Sys.vpn; onClicked: Sys.toggleVpn() }
+                         Tile { icon: "\u{F050E}"; name: "dark"; on: !Theme.light; onClicked: Theme.state.light = !Theme.state.light }
+                     }
+ 
+                     Rec { width: parent.width; visible: root.pick === "rec"; onTouched: root.pin(); onStart: { root.close(); Sys.toggleRec(); } }
++                    Sound { width: parent.width; kind: root.pick === "in" ? "in" : ""; onTouched: root.pin() }
+ 
+                     Slider { icon: "\u{F00E0}"; visible: Sys.hasBri; value: Sys.bri; onMoved: v => Sys.setBri(v) }
+-                    Slider { icon: Sys.muted ? "\u{F075F}" : "\u{F057E}"; value: Sys.muted ? 0 : Sys.vol; onMoved: v => Sys.setVol(v) }
++                    Slider { icon: Sys.muted ? "\u{F075F}" : "\u{F057E}"; value: Sys.muted ? 0 : Sys.vol; onMoved: v => Sys.setVol(v); onMenu: root.pick = root.pick === "out" ? "" : "out" }
++                    Sound { width: parent.width; kind: root.pick === "out" ? "out" : ""; onTouched: root.pin() }
+ 
+                     // режим питания, как в caelestia: четыре клетки, белая заливка переезжает к выбранной; засечки — сила.
+                     // ultra — ещё 60 Гц и без анимаций, blur и теней (Rules.modes)
+@@ -472,12 +475,14 @@ PanelWindow {
+         Lb { anchors.horizontalCenter: parent.horizontalCenter; text: tile.name; px: 10; color: tile.picked ? Theme.fg : Theme.grey }
+     }
+     // слайдер: залитая часть — белая пилюля с иконкой, пустая — ряд точек
++    // noah: right click — menu (the volume slider's: list of outputs)
+     component Slider: Rectangle {
+         id: sl
+         property real value
+         property string icon
+         signal moved(real v)
+-        readonly property real shown: area.pressed ? area.v : value
++        signal menu
++        readonly property real shown: area.pressedButtons & Qt.LeftButton ? area.v : value
+         width: col.width
+         height: 54
+         radius: 27
+@@ -512,9 +517,10 @@ PanelWindow {
+             property real v
+             anchors.fill: parent
+             preventStealing: true
++            acceptedButtons: Qt.LeftButton | Qt.RightButton
+             function set(x) { v = Math.max(0, Math.min(1, x / width)); sl.moved(v); }
+-            onPressed: e => { root.pin(); set(e.x); }
+-            onPositionChanged: e => set(e.x)
++            onPressed: e => { root.pin(); if (e.button === Qt.RightButton) sl.menu(); else set(e.x); }
++            onPositionChanged: e => { if (pressedButtons & Qt.LeftButton) set(e.x); }
+         }
+     }
+ }
+diff --git a/config/quickshell/glyph/quick/Sound.qml b/config/quickshell/glyph/quick/Sound.qml
+new file mode 100644
+index 0000000..06b0e45
+--- /dev/null
++++ b/config/quickshell/glyph/quick/Sound.qml
+@@ -0,0 +1,99 @@
++import QtQuick
++import Quickshell.Services.Pipewire
++import qs
++import qs.components
++
++// noah: audio devices, like Picker: outputs under the volume slider (right click on it), inputs under the tiles (right click
++// on mic). Click — that one becomes the default. "auto" in the header: a newly plugged/connected device takes over (Sys.devSettle)
++Rectangle {
++    id: root
++    property string kind // "out" | "in" | "" — closed
++    signal touched       // any click inside — the panel is pinned
++
++    readonly property bool isOut: kind === "out"
++    readonly property var cur: isOut ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource
++    // the default on top, then by name
++    readonly property var rows: (isOut ? Sys.outs : Sys.ins).slice()
++        .sort((a, b) => (b === cur) - (a === cur) || root.label(a).localeCompare(root.label(b)))
++
++    function label(n) { return n.description || n.nickname || n.name; }
++    function where(n) {
++        return /^bluez_/.test(n.name) ? "bluetooth" : /usb/i.test(n.name) ? "usb" : /hdmi|displayport/i.test(n.name) ? "hdmi"
++            : /^alsa_/.test(n.name) ? "built-in" : "virtual";
++    }
++    function icon(n) {
++        const w = where(n);
++        if (!isOut) return w === "bluetooth" ? "\u{F02CB}" : "\u{F036C}";
++        return w === "bluetooth" || /head/i.test(n.name) ? "\u{F02CB}" : w === "hdmi" ? "\u{F0379}" : "\u{F04C3}";
++    }
++
++    visible: kind === "out" || kind === "in"
++    height: list.height + 32
++    radius: 30
++    color: Theme.s2
++
++    Column {
++        id: list
++        x: 16
++        y: 16
++        width: parent.width - 32
++        spacing: 4
++
++        Item {
++            width: parent.width
++            height: 24
++            Lb { x: 4; anchors.verticalCenter: parent.verticalCenter; text: `${root.isOut ? "outputs" : "inputs"} · ${root.rows.length}` }
++            Lb {
++                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
++                rightPadding: 4
++                text: `auto · ${Theme.state.audioAuto ? "on" : "off"}`
++                color: Theme.state.audioAuto ? Theme.fg : Theme.grey
++                TapHandler { onTapped: { root.touched(); Theme.state.audioAuto = !Theme.state.audioAuto; } }
++                HoverHandler { cursorShape: Qt.PointingHandCursor }
++            }
++        }
++
++        Repeater {
++            model: root.rows
++            Rectangle {
++                id: row
++                required property var modelData
++                readonly property var o: modelData
++                readonly property bool on: o === root.cur
++                width: list.width
++                height: 56
++                radius: 28
++                color: hov.hovered ? Theme.s3 : "transparent"
++
++                Rectangle {
++                    id: ic
++                    x: 6
++                    anchors.verticalCenter: parent.verticalCenter
++                    width: 44
++                    height: 44
++                    radius: 22
++                    color: row.on ? Theme.fg : Theme.s3
++                    Icon { anchors.centerIn: parent; text: root.icon(row.o); font.pixelSize: 19; color: row.on ? Theme.ink : Theme.fg }
++                }
++                Column {
++                    anchors { left: ic.right; leftMargin: 14; right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
++                    Text { width: parent.width; elide: Text.ElideRight; text: root.label(row.o); font { family: Theme.ui; pixelSize: 15; weight: Font.DemiBold } color: Theme.fg }
++                    Lb {
++                        px: 10
++                        text: root.where(row.o) + (!row.on ? "" : row.o.audio?.muted ? " · in use · muted" : ` · in use · ${Math.round((row.o.audio?.volume ?? 0) * 100)}%`)
++                    }
++                }
++                HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
++                TapHandler { onTapped: { root.touched(); Sys.useDev(row.o); } }
++            }
++        }
++
++        Lb {
++            visible: !root.rows.length
++            x: 4
++            topPadding: 4
++            bottomPadding: 4
++            text: "no devices"
++        }
++    }
++}
+-- 
+2.55.0
+

@@ -14,6 +14,7 @@ Everything Glyph-only is in this folder. Nothing here is needed by end4.
   - **Bar tray** behind an arrow (Glyph had no StatusNotifierWatcher, so tray apps showed nowhere): icons in their own colours, a red dot while one wants attention; right-click opens the app's menu as a Glyph card, with a QUIT that ends the app
   - **Power menu** (Super+Esc) ends with one row **TO END4 / TO WINDOWS** (←→ picks): back to end4 via `rice-switch`, or a one-shot reboot into Windows via `reboot-to-windows` (the root `system/`)
   - Strata in Glyph type and shape, framed like Thunar, including its file chooser
+  - **Sound devices** in quick settings: right-click the volume slider for outputs, the mic tile for inputs; **auto** (on by default) makes a newly plugged or connected device the default, except HDMI/DP outputs
   - keyboard layout switch can be **off** (Prefs; `user.lua` keeps US only)
   - GTK4 rules for Apostrophe's editor; faster animations; threaded render loop (smooth at 160 Hz); Brave / Strata apps, keybinds
 - `home/` — mirrors `$HOME`; files Glyph's repo doesn't carry:
