@@ -51,7 +51,7 @@ Enter your password once, then reboot when it says done and pick Hyprland (not t
 2. clones this repo to `~/Projects/idontnoahdot`
 3. installs end-4's [illogical-impulse](https://github.com/end-4/dots-hyprland) at the pinned commit these dots were built on (`./setup install --force`), into `~/Projects/dots-hyprland`
 4. installs my packages from `packages/` (`hardware.txt`, the NVIDIA + ASUS bits, only on the same laptop model, an ASUS TUF A15 FA506QM)
-5. installs the system tweaks from `system/` (gamemode, zram + sysctl, no auto-sleep on lid close, v4l2loopback; on the same model: Wi-Fi ASPM fix, NVIDIA power limit, and `/usr/local/bin/reboot-to-windows` + its sudo rule for the power menus' Restart to Windows) and enables the services in `system/services.txt`
+5. installs the system tweaks from `system/` (gamemode, zram + sysctl, no auto-sleep on lid close, v4l2loopback, Bluetooth always pairable so pairings survive with no agent; on the same model: Wi-Fi ASPM fix, NVIDIA power limit, and `/usr/local/bin/reboot-to-windows` + its sudo rule for the power menus' Restart to Windows) and enables the services in `system/services.txt`
 6. runs `install.sh` (below)
 7. runs `glyph/install.sh`: Glyph next to end4, end4 stays active ([details](glyph/README.md))
 8. builds [Strata](https://github.com/lgse/strata) from the latest release with my patches in `strata/`
