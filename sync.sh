@@ -52,6 +52,7 @@ SYSTEM_FILES=(
   /etc/systemd/zram-generator.conf
   /etc/systemd/logind.conf.d/no-auto-sleep.conf
   /etc/modprobe.d/v4l2loopback.conf
+  /etc/bluetooth/main.conf
 )
 HARDWARE_FILES=(
   /etc/modprobe.d/mt7921e.conf

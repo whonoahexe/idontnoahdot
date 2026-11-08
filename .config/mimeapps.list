@@ -133,6 +133,7 @@ x-scheme-handler/rtsp=io.github.celluloid_player.Celluloid.desktop
 inode/directory=io.github.lgse.Strata.desktop
 text/markdown=org.gnome.gitlab.somas.Apostrophe.desktop
 text/x-markdown=org.gnome.gitlab.somas.Apostrophe.desktop
-text/plain=vim.desktop
+text/plain=org.gnome.gitlab.somas.Apostrophe.desktop
 
 [Added Associations]
+text/plain=org.gnome.gitlab.somas.Apostrophe.desktop;

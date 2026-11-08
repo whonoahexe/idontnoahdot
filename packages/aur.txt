@@ -10,6 +10,7 @@ quickshell-git
 slack-desktop
 spicetify-cli
 spotify
+teams-for-linux-bin
 ttf-ms-fonts
 upscayl-bin
 visual-studio-code-bin
