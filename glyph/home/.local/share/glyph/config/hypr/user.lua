@@ -1,10 +1,9 @@
 -- This machine: ASUS TUF A15 (NVIDIA dGPU + AMD iGPU), LG ultrawide on DP-1.
 -- Gitignored by Glyph, so `git pull` never touches it. The monitor layout and the
--- AC/battery watcher are shared with the end4 setup and loaded from its copy
--- (~/.local/share/rices/end4), so there is one version of them for both rices.
+-- AC/battery watcher sit next to it in machine/ (also gitignored; both kept in the dotfiles).
 
 local home = os.getenv("HOME")
-local end4hypr = home .. "/.local/share/rices/end4/.config/hypr"
+local machine = home .. "/.local/share/glyph/config/hypr/machine"
 
 -- ~/.local/bin is not on the systemd user PATH, so apps Hyprland starts couldn't see it
 hl.env("PATH", home .. "/.local/bin:" .. (os.getenv("PATH") or ""))
@@ -22,7 +21,7 @@ hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
 hl.env("GTK_USE_PORTAL", "1")
 hl.env("GDK_DEBUG", "portals")
 
--- monitors.lua (from end4) uses this helper from end4's hyprland/lib
+-- monitors.lua uses this helper (end4 had it in its hyprland/lib)
 if not is_file_exists then
     function is_file_exists(name)
         local f = io.open(name, "r")
@@ -36,9 +35,9 @@ end
 
 -- Laptop panel off while the ultrawide is docked, 60 Hz on battery, Movie mode cap.
 -- Glyph's Rules.monitor() calls hyde_apply_layout() after itself (local patch)
-dofile(end4hypr .. "/monitors.lua")
+dofile(machine .. "/monitors.lua")
 
--- Unfocused windows see-through like end4: the shell sets the opacity and dim (wallpaper picker → windows: solid / glass).
+-- Unfocused windows see-through: the shell sets the opacity and dim (wallpaper picker → windows: solid / glass).
 -- Glyph tags kitty opaque with the games and creative apps; let the terminal go see-through when unfocused too
 hl.window_rule({ match = { class = "kitty" }, opaque = false })
 
@@ -54,7 +53,7 @@ hl.window_rule({ match = { class = "^(steam_app).*" }, immediate = false })
 
 hl.on("hyprland.start", function()
     -- Keeps the monitor refresh rate and power profile in sync with AC/battery
-    hl.exec_cmd(end4hypr .. "/custom/scripts/battery_refresh_rate.sh")
+    hl.exec_cmd(machine .. "/battery_refresh_rate.sh")
     -- The mouse doesn't store its colour, so set the violet at every login
     hl.exec_cmd("openrgb --noautoconnect --device 'Razer Deathadder V2' --mode static --color 623CEA")
 end)

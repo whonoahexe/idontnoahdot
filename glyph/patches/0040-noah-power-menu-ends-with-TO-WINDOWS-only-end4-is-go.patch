@@ -1,0 +1,113 @@
+From 446563af738b17b51a83c1aacd20a816a994528c Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Fri, 20 Nov 2026 20:16:55 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20power=20menu=20ends=20with=20TO=20WINDO?=
+ =?UTF-8?q?WS=20only=20=E2=80=94=20end4=20is=20gone,=20so=20no=20TO=20END4?=
+ =?UTF-8?q?=20half;=20a=20long=20single=20word=20is=20fitted=20before=20th?=
+ =?UTF-8?q?e=20uptime=20ring=20like=20a=20pair?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config/quickshell/glyph/Sys.qml         |  2 +-
+ config/quickshell/glyph/Theme.qml       |  2 +-
+ config/quickshell/glyph/home/Back.qml   |  2 +-
+ config/quickshell/glyph/power/Power.qml | 17 ++++++++++-------
+ 4 files changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/config/quickshell/glyph/Sys.qml b/config/quickshell/glyph/Sys.qml
+index e74f76a..8939e06 100644
+--- a/config/quickshell/glyph/Sys.qml
++++ b/config/quickshell/glyph/Sys.qml
+@@ -110,7 +110,7 @@ Singleton {
+     property bool rec: false
+     readonly property bool night: Rules.store.night
+     property bool air: false
+-    // noah: tunnels for the vpn tile and panel (vpn/), polled too since warp-cli, protonvpn or end4's sidebar can flip them.
++    // noah: tunnels for the vpn tile and panel (vpn/), polled too since warp-cli or protonvpn can flip them from outside.
+     // proton — по интерфейсу: protonvpn status — питон, полсекунды CPU
+     property bool vpn: false
+     property bool proton: false
+diff --git a/config/quickshell/glyph/Theme.qml b/config/quickshell/glyph/Theme.qml
+index e3dcfca..3466db8 100644
+--- a/config/quickshell/glyph/Theme.qml
++++ b/config/quickshell/glyph/Theme.qml
+@@ -96,7 +96,7 @@ Singleton {
+             property int recFps: 60
+             property int recQuality: 2     // medium, high, very_high, ultra
+             property bool recCursor: true
+-            property bool winGlass: true    // noah: unfocused windows 90% opaque (frosted by the blur) and 5% dimmed, as in end4
++            property bool winGlass: true    // noah: unfocused windows 90% opaque (frosted by the blur) and 5% dimmed
+             property bool bentoRight: false // noah: home widgets against the right edge instead of next to the clock
+             property int homeUi: 0          // noah: home over a wallpaper: 0 default, 1 clear (shade behind the clock, greeting, edges)
+             property bool wallLive: true   // noah: a wallpaper folder's scene/Scene.qml plays over it (look: color)
+diff --git a/config/quickshell/glyph/home/Back.qml b/config/quickshell/glyph/home/Back.qml
+index a9a5b3e..2f3745b 100644
+--- a/config/quickshell/glyph/home/Back.qml
++++ b/config/quickshell/glyph/home/Back.qml
+@@ -37,7 +37,7 @@ PanelWindow {
+     }
+ 
+     // noah: live wallpaper — a wallpaper folder can ship scene/Scene.qml (an animated layer that draws the whole picture,
+-    // extracted from Wallpaper Engine for end4). Only in the colour look; it costs ~9 W, so it runs only while home shows
++    // extracted from Wallpaper Engine). Only in the colour look; it costs ~9 W, so it runs only while home shows
+     // (no windows on the workspace) and on AC, and holds its last frame otherwise
+     readonly property string scene: Theme.state.wall && Theme.state.wallLive && Theme.state.wallLook === 2
+         ? Theme.state.wall.slice(0, Theme.state.wall.lastIndexOf("/")) + "/scene/Scene.qml" : ""
+diff --git a/config/quickshell/glyph/power/Power.qml b/config/quickshell/glyph/power/Power.qml
+index 523526e..42f9288 100644
+--- a/config/quickshell/glyph/power/Power.qml
++++ b/config/quickshell/glyph/power/Power.qml
+@@ -12,22 +12,25 @@ PanelWindow {
+     id: root
+ 
+     property int sel: 2
+-    property int side: 0 // noah: which half of a paired row (TO END4 / TO WINDOWS)
++    property int side: 0 // noah: which half of a paired row
+     readonly property var items: [
+         ["LOCK", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.config/quickshell/rice/rice", "lock"])],
+         ["SLEEP", () => Quickshell.execDetached(["systemctl", "suspend"])],
+         ["SHUT DOWN", () => Quickshell.execDetached(["systemctl", "poweroff"])],
+         ["REBOOT", () => Quickshell.execDetached(["systemctl", "reboot"])],
+         ["LOG OUT", () => Hyprland.dispatch("hl.dsp.exit()")],
+-        // noah: one row, ←→ picks the half. ~/.local/bin/rice-switch swaps back to the end4 setup and logs out;
+-        // /usr/local/bin/reboot-to-windows (end4's Restart to Windows too) sets the firmware's one-shot BootNext to Windows and reboots
+-        [["TO END4", () => Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rice-switch", "end4", "--logout"])],
+-         ["TO WINDOWS", () => Quickshell.execDetached(["sudo", "-n", "/usr/local/bin/reboot-to-windows"])]]
++        // noah: /usr/local/bin/reboot-to-windows (root, from the dotfiles' system/) sets the firmware's one-shot BootNext
++        // to Windows and reboots. A row can still be a pair of [label, action] halves (←→ picks one)
++        ["TO WINDOWS", () => Quickshell.execDetached(["sudo", "-n", "/usr/local/bin/reboot-to-windows"])]
+     ]
+     readonly property bool paired: Array.isArray(items[sel][0])
+     // noah: at 168 a paired row would run into the uptime ring, so its chosen half grows only as far as fits
+     // (900 = from the words to the ring with a margin; the other half and the slash stay at 66)
+     FontMetrics { id: dots; font { family: Theme.dot; pixelSize: 168; weight: Font.Black } }
++    // noah: a single long word ("TO WINDOWS") would run into the ring at 168 too
++    function fitOne(word) {
++        return Math.min(168, Math.floor(168 * (900 - 60) / dots.advanceWidth(word)));
++    }
+     function fit(row, half) {
+         const other = dots.advanceWidth(row[1 - half][0] + "/") * 66 / 168;
+         return Math.min(168, Math.floor(168 * (900 - other - 60) / dots.advanceWidth(row[half][0])));
+@@ -117,7 +120,7 @@ PanelWindow {
+                                 Num {
+                                     id: word
+                                     text: (it.pair ? it.row[half.index] : it.row)[0]
+-                                    font.pixelSize: !half.lit ? 66 : it.pair ? root.fit(it.row, half.index) : 168
++                                    font.pixelSize: !half.lit ? 66 : it.pair ? root.fit(it.row, half.index) : root.fitOne(it.row[0])
+                                     color: half.lit ? Theme.fg : Theme.mute
+                                     Behavior on font.pixelSize { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+                                     Behavior on color { ColorAnimation { duration: Theme.t } }
+@@ -160,7 +163,7 @@ PanelWindow {
+             anchors { bottom: parent.bottom; bottomMargin: 70 }
+             spacing: 34
+             Lb { text: "↑↓ select" }
+-            Lb { visible: root.paired; text: "←→ end4 / windows" }
++            Lb { visible: root.paired; text: "←→ pick" }
+             Lb { text: "↵ confirm" }
+             Lb { text: "esc cancel" }
+         }
+-- 
+2.55.0
+

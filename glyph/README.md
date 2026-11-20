@@ -1,8 +1,6 @@
 # Glyph
 
-My second rice: [Glyph](https://github.com/Nebelung-cloud/glyph-rice), a Nothing OS–style Hyprland + Quickshell setup (black, white dots, one red), with my changes on top, and the apps themed to match it. It lives next to the end4 rice at the repo root; `rice-switch` flips between them.
-
-Everything Glyph-only is in this folder. Nothing here is needed by end4.
+My rice: [Glyph](https://github.com/Nebelung-cloud/glyph-rice), a Nothing OS–style Hyprland + Quickshell setup (black, white dots, one red), with my changes on top, and the apps themed to match it. Everything rice is in this folder; the repo root holds the machine and its apps.
 
 ## What's here
 
@@ -12,13 +10,15 @@ Everything Glyph-only is in this folder. Nothing here is needed by end4.
   - home widgets **by the clock or against the right edge** (Prefs → Home → place)
   - bar margins match Hyprland's real gaps; clipboard image preview toggles dots ↔ original (Ctrl+O)
   - **Bar tray** behind an arrow (Glyph had no StatusNotifierWatcher, so tray apps showed nowhere): icons in their own colours, a red dot while one wants attention; right-click opens the app's menu as a Glyph card, with a QUIT that ends the app
-  - **Power menu** (Super+Esc) ends with one row **TO END4 / TO WINDOWS** (←→ picks): back to end4 via `rice-switch`, or a one-shot reboot into Windows via `reboot-to-windows` (the root `system/`)
+  - **Power menu** (Super+Esc) ends with **TO WINDOWS**: a one-shot reboot into Windows via `reboot-to-windows` (the root `system/`)
   - Strata in Glyph type and shape, framed like Thunar, including its file chooser
   - **Sound devices** in quick settings: right-click the volume slider for outputs, the mic tile for inputs; **auto** (on by default) makes a newly plugged or connected device the default, except HDMI/DP outputs
   - keyboard layout switch can be **off** (Prefs; `user.lua` keeps US only)
   - GTK4 rules for Apostrophe's editor; faster animations; threaded render loop (smooth at 160 Hz); Brave / Strata apps, keybinds
 - `home/` — mirrors `$HOME`; files Glyph's repo doesn't carry:
-  - `.local/share/glyph/config/hypr/user.lua` — machine overrides (gitignored by Glyph): NVIDIA env, monitor layout shared with end4, VRR, mouse colour, animation speeds, kitty see-through when unfocused
+  - `.local/share/glyph/config/hypr/user.lua` — machine overrides (gitignored by Glyph): NVIDIA env, VRR, mouse colour, animation speeds, kitty see-through when unfocused
+  - `.local/share/glyph/config/hypr/machine/` — loaded by `user.lua` (also gitignored): `monitors.lua` (laptop panel off while the ultrawide on DP-1 is docked, 60 Hz on battery, Movie mode cap) and `battery_refresh_rate.sh` (tells it when AC/battery changes)
+  - `.config/gtk-3.0/bookmarks` — file-chooser bookmarks
   - `.local/state/rice/glyph.json` + `.config/demonshot/rules.json` — Glyph's settings (wallpaper, looks, widgets, gaps, idle…)
   - `.local/bin/glyph-easing` — switch the ljs.lol easing on/off
   - Apps themed to match: `.config/spicetify/Themes/glyph` (Spotify, on the Text theme) + `Extensions/glyph-move.js` (right-click → Move to top/bottom in playlists), `.local/share/brave-glyph-theme` (Brave), `.config/apostrophe/glyph.css` (Apostrophe's preview), `.config/strata/themes/glyph.toml` (Strata, on Grayscale Dark)
@@ -32,11 +32,10 @@ The Obsidian theme isn't here: it lives in the vault itself (`.obsidian/themes/G
 `../bootstrap.sh` does this on a fresh machine. On an existing one:
 
 ```sh
-./install.sh      # clone + patches, home/ files (existing ones backed up), hooks (sudo), rice-switch init
-rice-switch glyph --logout
+./install.sh      # clone + patches, Glyph's links, home/ files (existing ones backed up), hooks (sudo), GTK look
 ```
 
-It does not run Glyph's own upstream `install.sh` (that links straight into `~/.config`, which `rice-switch` manages); Glyph's packages are in `../packages`. Then by hand: start Spotify and log in once and run `spicetify backup apply`; in Brave load `~/.local/share/brave-glyph-theme` unpacked (Developer mode, once per profile); import `brave/nightTab-glyph.json` in Night Tab.
+Of Glyph's own upstream `install.sh` only `--links` is used (its symlinks into `~/.config`); its packages are in `../packages/glyph.txt` and its services are enabled by `../bootstrap.sh`. Then by hand: start Spotify and log in once and run `spicetify backup apply`; in Brave load `~/.local/share/brave-glyph-theme` unpacked (Developer mode, once per profile); import `brave/nightTab-glyph.json` in Night Tab.
 
 ## Updating
 

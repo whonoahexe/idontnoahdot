@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fresh Arch install -> the whole rice, in one command (run as your user, not root):
+# Fresh Arch install -> the Glyph rice and my apps, in one command (run as your user, not root):
 #
 #   bash <(curl -fsSL https://raw.githubusercontent.com/whonoahexe/idontnoahdot/master/bootstrap.sh)
 #
@@ -8,9 +8,7 @@ set -euo pipefail
 
 DOTS_REPO="https://github.com/whonoahexe/idontnoahdot.git"
 DOTS="$HOME/Projects/idontnoahdot"
-END4_REPO="https://github.com/end-4/dots-hyprland.git"
-END4="$HOME/Projects/dots-hyprland"
-END4_COMMIT="2f0c8bf42b803f4d597572f2a014d4e78d7d9f26"   # the end-4 version these dots were built on
+FONT_REPO="https://github.com/end-4/google-sans-flex.git"   # Google Sans Flex, the GTK font
 STRATA_REPO="https://github.com/lgse/strata.git"
 STRATA="$HOME/.local/src/strata"
 HARDWARE_MODEL="FA506QM"   # ASUS TUF A15; NVIDIA/ASUS packages and tweaks only apply on this model
@@ -43,14 +41,6 @@ else
   git clone "$DOTS_REPO" "$DOTS"
 fi
 
-step "Installing end-4's illogical-impulse (Hyprland, quickshell, matugen, fonts...)"
-[ -d "$END4/.git" ] || git clone "$END4_REPO" "$END4"
-git -C "$END4" fetch -q origin
-git -C "$END4" checkout -q -f "$END4_COMMIT"
-# The same local tweak used on the original install (yay without --sudoloop)
-git -C "$END4" apply "$DOTS/end4/install-deps.patch" 2>/dev/null || true
-(cd "$END4" && ./setup install --force --skip-sysupdate)
-
 is_hardware=false
 grep -q "$HARDWARE_MODEL" /sys/class/dmi/id/product_name 2>/dev/null && is_hardware=true
 
@@ -66,15 +56,26 @@ install_pkgs() {
   fi
 }
 
-step "Installing my packages"
+step "Installing packages"
 # Drivers first, so Steam's lib32 Vulkan dependency resolves to NVIDIA under --noconfirm
 if $is_hardware; then
+  sudo pacman -S --needed --noconfirm linux-headers   # for nvidia-open-dkms / v4l2loopback-dkms
   install_pkgs "$DOTS/packages/hardware.txt"
 else
   warn "Not a $HARDWARE_MODEL: skipping NVIDIA/ASUS packages (packages/hardware.txt)"
 fi
+install_pkgs "$DOTS/packages/glyph.txt"   # Hyprland, quickshell, SDDM, PipeWire, kitty/fish... (the rice)
 install_pkgs "$DOTS/packages/pacman.txt"
 install_pkgs "$DOTS/packages/aur.txt"
+
+if ! fc-list | grep -q "Google Sans Flex"; then
+  step "Installing Google Sans Flex"
+  tmp="$(mktemp -d)"
+  git clone -q --depth 1 "$FONT_REPO" "$tmp/gsf"
+  sudo install -D -m 644 -t /usr/share/fonts/google-sans-flex $(find "$tmp/gsf" -iname '*.ttf' -o -iname '*.otf')
+  fc-cache -f >/dev/null
+  rm -rf "$tmp"
+fi
 
 step "Installing system tweaks into /etc and /usr/local/bin"
 install_tree() {
@@ -88,6 +89,8 @@ install_tree() {
 }
 install_tree "$DOTS/system/common"
 $is_hardware && install_tree "$DOTS/system/hardware"
+# NVIDIA modules in the initramfs (system/hardware/etc/mkinitcpio.conf.d): rebuild once
+$is_hardware && sudo mkinitcpio -P
 sudo systemctl daemon-reload
 while read -r unit; do
   if systemctl list-unit-files "$unit" --no-legend | grep -q .; then
@@ -98,11 +101,16 @@ if $is_hardware && command -v asusctl >/dev/null; then
   asusctl battery limit 90 || warn "asusctl battery limit failed (asusd starts after reboot)"
 fi
 
+# What Glyph's own installer would enable (ydotool: the shell types/clicks through it;
+# input/video groups: ydotool's uinput, brightnessctl)
+systemctl --user enable pipewire-pulse.socket wireplumber ydotool || warn "could not enable the PipeWire/ydotool user units"
+sudo usermod -aG input,video "$USER"
+xdg-user-dirs-update
+
 step "Applying the dots"
 "$DOTS/install.sh"
 
-# Glyph: a second, separate rice (glyph/). end4 stays the active one; rice-switch glyph to try it
-step "Installing the Glyph rice next to end4"
+step "Installing the Glyph rice"
 "$DOTS/glyph/install.sh" || warn "Glyph install failed; re-run $DOTS/glyph/install.sh"
 
 if [ ! -x "$HOME/.local/bin/strata" ]; then
@@ -133,3 +141,4 @@ fi
 
 step "Done"
 echo "Reboot, pick Hyprland (not the UWSM entry) at the login screen, and you're home."
+echo "By hand: Spotify login + spicetify backup apply, the Brave theme and Night Tab (see glyph/README.md)."

@@ -1,0 +1,27 @@
+From b8502052ded5923e0b3abcfe08c7efd594113544 Mon Sep 17 00:00:00 2001
+From: noah <whonoah.exe@gmail.com>
+Date: Fri, 20 Nov 2026 20:17:10 +0530
+Subject: [PATCH] =?UTF-8?q?noah:=20config/hypr/machine/=20is=20gitignored?=
+ =?UTF-8?q?=20like=20user.lua=20=E2=80=94=20this=20laptop's=20monitor=20la?=
+ =?UTF-8?q?yout=20and=20AC/battery=20watcher=20live=20there?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .gitignore | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/.gitignore b/.gitignore
+index bc3e66e..b1428b9 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,3 +1,5 @@
+ # личное: свои бинды hypr и фото наушников (buds/<устройство>.png, рендер с nothing.tech)
+ config/hypr/user.lua
+ config/quickshell/glyph/buds/*.png
++# noah: this machine's monitor layout + AC/battery watcher, loaded by user.lua (kept in the dotfiles)
++config/hypr/machine/
+-- 
+2.55.0
+

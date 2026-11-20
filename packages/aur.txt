@@ -6,7 +6,6 @@ linux-wallpaperengine-git
 mpvpaper
 protonplus
 qtengine
-quickshell-git
 slack-desktop
 spicetify-cli
 spotify

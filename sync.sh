@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Pulls the live configs from $HOME into this repo (the reverse of install.sh).
-# The repo root is end4 plus what both rices share; glyph/ is the Glyph rice on its
-# own (see the Glyph section at the end and glyph/README.md).
-# Run it, review `git diff`, then commit. Personal values (weather city) are
-# redacted, and the end4-pC shell is stored as a patch on top of pctrade's fork.
+# The repo root is the machine and its apps (packages, /etc tweaks, helper scripts,
+# app configs); glyph/ is the rice (see the Glyph section at the end and glyph/README.md).
+# Run it, review `git diff`, then commit. The end4 setup this repo used to hold is
+# kept at the end4-final tag.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,35 +12,20 @@ cd "$REPO_DIR"
 # Paths relative to $HOME. Directories are mirrored (files deleted at home are
 # deleted here too); files are copied as-is.
 PATHS=(
-  .bashrc .bash_profile .gitconfig .gtkrc-2.0
-  .config/hypr
-  .config/matugen
-  .config/illogical-impulse/config.json
-  .config/illogical-impulse/presets
-  .config/fish .config/kitty .config/foot .config/ghostty .config/starship.toml
-  .config/zshrc.d
-  .config/gtk-3.0 .config/gtk-4.0 .config/gtkrc .config/gtkrc-2.0
-  .config/Kvantum .config/kde-material-you-colors/config.conf .config/darklyrc
-  .config/fontconfig .config/xsettingsd .config/QtProject.conf .config/Trolltech.conf
-  .config/fuzzel .config/wlogout .config/cava .config/mpv
+  .bashrc .bash_profile .gitconfig
+  .config/ghostty .config/fontconfig .config/mpv
   .config/mimeapps.list .config/xdg-desktop-portal
   .config/MangoHud .config/brave-flags.conf
   .config/strata/settings.toml .config/strata/actions
   .config/systemd/user/audio-watchdog.service .config/systemd/user/audio-watchdog.timer
-  .config/systemd/user/mouse-rgb.service .config/systemd/user/linux-wallpaperengine.service
+  .config/systemd/user/mouse-rgb.service
   .config/systemd/user/strata-patched-update.service .config/systemd/user/strata-patched-update.timer
-  .local/bin/audio-watchdog .local/bin/suspend-unless-docked .local/bin/gamemode-hook.sh
+  .local/bin/audio-watchdog .local/bin/gamemode-hook.sh
   .local/bin/mouse-rgb-watch .local/bin/strata-patched-update
   .local/bin/gh .local/bin/git-credential-gh-account
-  .local/bin/rice-switch .local/bin/rice-snapshot
   .local/share/applications/io.github.lgse.Strata.desktop
   .local/share/dbus-1/services/io.github.lgse.Strata.FileManager1.service
   .local/share/icons/hicolor/scalable/apps/io.github.lgse.Strata.svg
-  .local/state/quickshell/user/generated/colors.json
-  .local/state/quickshell/user/generated/color.txt
-  .local/state/quickshell/user/generated/material_colors.scss
-  .local/state/quickshell/user/generated/terminal
-  .local/state/quickshell/user/generated/wallpaper
   Pictures/Wallpapers/city-night-street
 )
 
@@ -61,47 +46,35 @@ HARDWARE_FILES=(
 )
 
 # Packages: everything installed explicitly, minus the base system (comes from
-# the Arch install), end-4's own meta packages (its installer handles them),
-# Plasma leftovers, and linux-wallpaper-engine-ux (built locally, not on the AUR).
+# the Arch install), Plasma/end4 leftovers, linux-wallpaper-engine-ux (built
+# locally, not on the AUR) and quickshell-git (extra's quickshell is new enough
+# now). Glyph's own packages are hand-kept in packages/glyph.txt.
 # Drivers/laptop tools go to hardware.txt.
-PKG_SKIP='^(base|base-devel|linux|linux-firmware|linux-headers|amd-ucode|intel-ucode|efibootmgr|sudo|nano|man-db|yay|yay-bin|plasma-meta|linux-wallpaper-engine-ux|illogical-impulse-.*)$'
+PKG_SKIP='^(base|base-devel|linux|linux-firmware|linux-headers|amd-ucode|intel-ucode|efibootmgr|sudo|nano|man-db|yay|yay-bin|plasma-meta|linux-wallpaper-engine-ux|illogical-impulse-.*|quickshell-git)$'
 PKG_HARDWARE='^(nvidia-.*|lib32-nvidia-utils|cuda|libva-nvidia-driver|asusctl|rog-control-center|v4l2loopback-dkms)$'
 
 EXCLUDES=(--exclude '*.bak*' --exclude '*.old' --exclude '__pycache__' --exclude 'mpvpaper_thumbnails')
 
-# With rice-switch set up, the paths that differ between rices are symlinks to the
-# active rice, and end4's real copies live in its store: always read end4's from
-# there, so syncing while Glyph is active doesn't back up Glyph's files as ours
-END4_STORE="$HOME/.local/share/rices/end4"
-
 for p in "${PATHS[@]}"; do
   src="$HOME/$p"
-  # only for paths that are themselves rice links (.config/fish is a real folder holding one)
-  [ -L "$HOME/$p" ] && [ -e "$END4_STORE/$p" ] && src="$END4_STORE/$p"
   if [ ! -e "$src" ]; then
     echo "skip (missing at home): $p"
     continue
   fi
   mkdir -p "$(dirname "$p")"
   if [ -d "$src" ]; then
-    # -L: copy what links point to (e.g. ~/.config/fish/config.fish -> the rice store)
+    # -L: copy what links point to
     rsync -aL --delete "${EXCLUDES[@]}" "$src/" "$p/"
   else
     cp -aL "$src" "$p"
   fi
 done
 
-# Rice-specific files inside a synced folder (fish/config.fish, gtk-*/gtk.css) come
-# from end4's store too; a file only another rice has (fish_greeting.fish) is dropped
-if [ -d "$END4_STORE" ]; then
-  for f in .config/fish/config.fish .config/gtk-3.0/gtk.css .config/gtk-4.0/gtk.css; do
-    [ -e "$END4_STORE/$f" ] && cp -aL "$END4_STORE/$f" "$f"
-  done
-  rm -f .config/fish/functions/fish_greeting.fish
-fi
-
-# /etc/sudoers.d is root-only, so its files can't be re-read here: the repo's copies are kept across the wipe
-keep="$(mktemp -d)"; cp -a --parents system/*/etc/sudoers.d "$keep" 2>/dev/null || true
+# Files kept only in the repo across the wipe below: /etc/sudoers.d is root-only, so it
+# can't be re-read here, and the NVIDIA early-load / modeset drop-ins were written for the
+# fresh install (this machine has them in its hand-edited /etc/mkinitcpio.conf instead)
+REPO_ONLY=(system/*/etc/sudoers.d system/hardware/etc/mkinitcpio.conf.d system/hardware/etc/modprobe.d/nvidia.conf)
+keep="$(mktemp -d)"; cp -a --parents "${REPO_ONLY[@]}" "$keep" 2>/dev/null || true
 rm -rf system && mkdir -p system/common system/hardware
 cp -a "$keep/system" . 2>/dev/null || true; rm -rf "$keep"
 for f in "${SYSTEM_FILES[@]}"; do [ -f "$f" ] && install -D -m 644 "$f" "system/common$f"; done
@@ -131,27 +104,10 @@ elif [ -d "$STRATA/.git" ]; then
   sed -i -f "$SCRUB" strata/*.patch
 fi
 
-# Redact personal values from the shell config and presets
-for f in .config/illogical-impulse/config.json .config/illogical-impulse/presets/*.json; do
-  [ -f "$f" ] || continue
-  jq '(.bar.weather.city? // empty) |= ""' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-done
-
-# end4-pC: the fork's upstream commit + our local changes as one patch
-QS="$HOME/.config/quickshell/end4-pC"
-if [ -d "$QS/.git" ]; then
-  mkdir -p quickshell
-  base="$(git -C "$QS" merge-base HEAD origin/main)"
-  git -C "$QS" diff --binary "$base" > quickshell/end4-pC.patch
-  printf 'repo=%s\nbase=%s\n' "$(git -C "$QS" remote get-url origin)" "$base" > quickshell/end4-pC.base
-  untracked="$(git -C "$QS" ls-files --others --exclude-standard)"
-  [ -n "$untracked" ] && printf 'warning: untracked files in end4-pC are not in the patch:\n%s\n' "$untracked"
-fi
-
-# ---- Glyph: everything Glyph-only goes to glyph/, nothing to the root ----
+# ---- Glyph: everything rice goes to glyph/, nothing to the root ----
 # Glyph itself: Nebelung-cloud/glyph-rice at its upstream tag + our commits as patches
 # (git am keeps them as commits, and the tags glyph-easing needs are recorded by number).
-# home/ mirrors $HOME: files Glyph's repo doesn't carry (user.lua is gitignored there),
+# home/ mirrors $HOME: files Glyph's repo doesn't carry (user.lua and machine/ are gitignored there),
 # its settings, and the apps themed to match it. system/ = its pacman hooks.
 GLYPH="$HOME/.local/share/glyph"
 if [ -d "$GLYPH/.git" ]; then
@@ -168,6 +124,8 @@ if [ -d "$GLYPH/.git" ]; then
   [ -z "$(git -C "$GLYPH" status --porcelain)" ] || echo "warning: uncommitted changes in $GLYPH are not in glyph/patches"
   GLYPH_HOME=(
     .local/share/glyph/config/hypr/user.lua
+    .local/share/glyph/config/hypr/machine
+    .config/gtk-3.0/bookmarks
     .local/state/rice/glyph.json
     .config/demonshot/rules.json
     .local/bin/glyph-easing
